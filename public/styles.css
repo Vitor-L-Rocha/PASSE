@@ -160,4 +160,8 @@ button.primary:disabled { opacity: 0.6; cursor: progress; }
   .card .value { display: none; }
   .bar { grid-template-columns: 100px 1fr 44px; }
   .topbar { padding: 12px 16px; }
+  .tabs { scrollbar-width: none; gap: 0; }
+  .tab { font-size: 16px; padding: 8px 10px; }
+  .tab .pre { display: none; }
+  .tab .count { margin-left: 3px; }
 }

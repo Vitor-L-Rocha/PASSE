@@ -124,7 +124,7 @@ function renderResults() {
   if (d.providers.length === 1 && d.providers[0] === 'demo') warns.push('Usando dados de demonstração (jogadores fictícios). Configure provedores reais para resultados de mercado.');
   warns.push(...(d.criteria.warnings || []));
   for (const pe of d.providerErrors || [])warns.push(`Fonte "${pe.provider}" indisponível: ${pe.message}`);
-  if (d.criteria.text && !d.criteria.traits.length && !Object.keys(f).length) warns.push('Nenhuma característica reconhecida no texto; o ranking usa o perfil padrão da posição.');
+  if (d.criteria.text && !d.criteria.traits.length && !Object.keys(f).length && !(d.criteria.warnings || []).length) warns.push('Nenhuma característica reconhecida no texto; o ranking usa o perfil padrão da posição.');
 
   el.innerHTML = `
     <div class="summary">${d.total} jogadores dentro do perfil · ${tags.join('')}</div>
@@ -132,7 +132,7 @@ function renderResults() {
     <div class="tabs" role="tablist">
       ${Object.entries(meta.markets).map(([k, label]) => `
         <button class="tab" role="tab" data-market="${k}" style="--m: var(--${k})" aria-selected="${k === activeMarket}">
-          ${esc(label)}<span class="count">${d.markets[k].length}</span>
+          <span class="pre">Mercado </span>${esc(label.replace(/^Mercado /, ''))}<span class="count">${d.markets[k].length}</span>
         </button>`).join('')}
     </div>
     <p class="tab-desc">${esc(MARKET_DESC[activeMarket])} Ordenado por aderência ao perfil pedido, não por qualidade geral.</p>
