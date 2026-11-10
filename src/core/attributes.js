@@ -11,7 +11,7 @@
 const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
 function scale(value, lo, hi) {
-  if (value === undefined || value === null || Number.isNaN(value)) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return clamp(((value - lo) / (hi - lo)) * 100);
 }
 
@@ -28,7 +28,7 @@ function blend(parts) {
 }
 
 export function deriveAttributes(stats = {}, { heightCm, position } = {}) {
-  const s = stats;
+  const s = stats || {};
   const attrs = {
     finalizacao: blend([
       [scale(s.goals, 0, 0.8), 2],
