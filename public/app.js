@@ -249,6 +249,8 @@ function renderReport() {
     notices.push(d.desired.length
       ? `Sem características escolhidas, o relatório usa o perfil típico de ${lower(positionName(d.query.position))}: ${listPT(d.desired.map((c) => lower(charLabel(c))))}.`
       : 'Sem características avaliáveis para esta posição, a lista prioriza quem mais jogou na temporada.');
+  } else if (!d.desired.length) {
+    notices.push('Nenhuma das características pedidas pode ser avaliada com a fonte atual. A lista mostra todos dentro do valor esperado, priorizando quem mais jogou.');
   }
   const source = meta.sources?.[0];
 

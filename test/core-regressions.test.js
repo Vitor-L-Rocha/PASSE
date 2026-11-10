@@ -83,3 +83,13 @@ test('jogadores sem dados de desempenho entram no fim; características indispon
   assert.deepEqual(r.desired, ['desarme']);
   assert.deepEqual(r.ignored, ['drible']);
 });
+
+test('pedido só com características inavaliáveis vira busca neutra, sem trocar pelo perfil da posição', () => {
+  const a = { ...player, id: 'a', minutes: 500, characteristics: { positive: ['desarme'], negative: [] } };
+  const b = { ...player, id: 'b', minutes: 2500, characteristics: { positive: ['passe'], negative: [] } };
+  const r = rankPlayers([a, b], { country: 'PT', position: 'CB', criteria: { characteristics: ['drible'] }, available: ['desarme'] });
+  assert.equal(r.usingPositionProfile, false);
+  assert.deepEqual(r.desired, []);
+  assert.deepEqual(r.ignored, ['drible']);
+  assert.deepEqual(r.markets.interno.map((p) => p.id), ['b', 'a'], 'neutra: mais minutos primeiro');
+});

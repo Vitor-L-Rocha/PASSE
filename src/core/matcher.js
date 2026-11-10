@@ -43,8 +43,10 @@ export function rankPlayers(players, { country, maxBudgetEur, position, criteria
   const asked = Array.isArray(criteria.characteristics) ? criteria.characteristics : [];
   const requested = asked.filter(can);
   const ignored = asked.filter((c) => !can(c));
-  // Sem características pedidas, usa o perfil típico da posição.
-  const usingPositionProfile = requested.length === 0;
+  // Sem características pedidas, usa o perfil típico da posição. Se o clube pediu
+  // características e NENHUMA é avaliável pela fonte, a busca fica neutra (não troca
+  // o pedido em silêncio pelo perfil da posição).
+  const usingPositionProfile = asked.length === 0;
   const desired = usingPositionProfile ? (CORE_BY_POSITION[position] || []).filter(can) : requested;
 
   const results = [];
@@ -57,7 +59,7 @@ export function rankPlayers(players, { country, maxBudgetEur, position, criteria
     // exceto jogadores SEM dados de desempenho na fonte: eles entram no fim da lista,
     // sinalizados, para que ligas sem estatísticas não sumam do relatório.
     const noData = m.characteristics.source === 'indisponivel';
-    if (!usingPositionProfile && m.matched.length === 0 && !noData) continue;
+    if (!usingPositionProfile && desired.length > 0 && m.matched.length === 0 && !noData) continue;
     results.push({
       ...p,
       characteristics: m.characteristics,
