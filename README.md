@@ -1,11 +1,43 @@
 # PASSE
 PASSE (Plataforma de Auxílio ao Scouting para Sociedades Esportivas) surge como uma alternativa de facilitar o trabalho de pesquisa por jogadores para profissionais de direção esportiva de clubes. Atuando conforme as suas preferências específicas e gerando um relatório daqueles que mais se enquadram.
 
-## Provedores de dados
+## Começando
+
+```bash
+npm install
+npm start      # na primeira vez baixa os dados reais (~55 MB) e abre em http://localhost:3000
+npm test
+```
+
+## Dados reais (fonte padrão)
+
+O PASSE usa por padrão o projeto aberto
+[transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets),
+publicado em domínio público (**CC0 1.0**). `npm run sync-data` baixa as tabelas e
+gera um índice local em `.cache/tmdata/players.json` (fora do Git), com cerca de
+**24 mil jogadores em atividade de 31 ligas** (Brasil, Argentina, México, MLS,
+Japão, Coreia, Arábia Saudita, Austrália e as principais da Europa).
+
+- **Para todos os jogadores:** nome, idade, posição detalhada, pé, altura, clube, liga,
+  valor de mercado, fim de contrato, nacionalidade e foto.
+- **Gols, assistências e minutos por temporada:** só para as ligas europeias em que o
+  dataset registra cada partida. Nas demais (Brasileirão, por exemplo) o jogador aparece
+  no relatório marcado como "sem dados de desempenho nesta fonte".
+- **Características avaliáveis:** finalização e criação de jogadas (gols e assistências
+  por 90 minutos, nas duas últimas temporadas, com no mínimo 450 minutos). As demais
+  dependem de uma fonte com estatísticas detalhadas (feed SofaScore autorizado ou
+  API-Football); a interface só oferece o que as fontes ativas conseguem avaliar.
+- **Não disponíveis nesta fonte:** mapa de calor e títulos.
+- O dataset está atualizado até **julho de 2026**; o mantenedor pausou as coletas. Rode
+  `npm run sync-data` de novo para pegar atualizações quando voltarem.
+
+Sem o índice, o PASSE usa jogadores fictícios (`demo`), também usados nos testes.
+
+## Outros provedores de dados
 
 Node 20.6+ e `npm install`. Copie `.env.example` para `.env`, configure as fontes
 e execute `node --env-file=.env src/server.js`. `npm start` usa somente as variáveis
-já exportadas no ambiente. O padrão `PASSE_PROVIDERS=demo` usa dados fictícios.
+já exportadas no ambiente. Sem `PASSE_PROVIDERS`, o padrão é `tmdata` (dados reais acima).
 
 - `transfermarkt`: adaptador para uma instância **autorizada** do
   [transfermarkt-api v4](https://github.com/felipeall/transfermarkt-api).
@@ -27,7 +59,7 @@ já exportadas no ambiente. O padrão `PASSE_PROVIDERS=demo` usa dados fictício
   como percentual: o campo representa média de passes certos. Dados ausentes
   continuam ausentes, inclusive pé preferencial e contrato.
 
-Ative fontes com `PASSE_PROVIDERS=demo,transfermarkt,api-football`. Fontes sem
+Ative fontes com `PASSE_PROVIDERS=tmdata,transfermarkt,api-football`. Fontes sem
 configuração válida ficam desabilitadas e não fazem chamadas. Detalhes são
 resolvidos apenas entre fontes ativas. Erros de uma fonte aparecem em
 `providerErrors`, preservando resultados das demais. IDs são únicos por fonte;
@@ -87,14 +119,6 @@ acontece antes do ranking, então o relatório e a ficha usam as mesmas
 características. Sem configuração, nada é consultado. Contrato do feed:
 `src/providers/SOFASCORE_FEED.md`.
 
-## Rodando
-
-```bash
-npm install
-npm start          # http://localhost:3000 (PORT=4317 npm start para usar outra porta)
-npm test
-```
-
 ## Arquitetura
 
 ```
@@ -110,6 +134,7 @@ src/
   data/positions.js      posições e perfil base de cada uma
   data/demoDataset.js    jogadores FICTÍCIOS para desenvolvimento
   providers/             fontes de dados plugáveis (contrato em providers/index.js)
+scripts/sync-data.js     download e indexação dos dados reais (transfermarkt-datasets, CC0)
 public/                  frontend em 3 telas (#/, #/relatorio, #/jogador/:id), sem build
 test/                    testes (node:test)
 ```
@@ -122,6 +147,6 @@ test/                    testes (node:test)
 
 ### Fontes de dados
 
-Os provedores são selecionados pela variável `PASSE_PROVIDERS` (padrão: `demo`, com jogadores fictícios).
+Os provedores são selecionados pela variável `PASSE_PROVIDERS` (padrão: `tmdata`, dados reais; `demo` se o índice não existir).
 As integrações com fontes externas (Transfermarkt, SofaScore etc.) precisam respeitar os termos de uso de cada
 plataforma. A configuração dos provedores disponíveis está em `.env.example`.

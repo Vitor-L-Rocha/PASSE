@@ -1,58 +1,89 @@
-// PASSE — frontend em 3 telas (rotas por hash):
-//   #/                    início: posição, lugar, valor esperado e características
-//   #/relatorio?...       relatório com abas Nacional / Continental / Global
-//   #/jogador/<id>        ficha do jogador (mapa de calor, temporadas, títulos, características)
+// PASSE — três telas com rotas por hash:
+//   #/                início: posição (no campo), lugar, valor esperado e características
+//   #/relatorio?...   relatório com abas Nacional / Continental / Global
+//   #/jogador/<id>    ficha do jogador
 
 const app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 let meta = null;
-let lastReportHash = '#/';
-let lastReport = null; // { key, data }
-let activeMarket = null;
 const draft = { position: 'ST', country: 'BR', budget: '', selected: [], text: '' };
+// Último relatório: dados, aba ativa e rolagem, para voltar da ficha exatamente onde estava.
+const report = { hash: null, key: null, data: null, market: null, scrollY: 0 };
 
-const MARKET_HINT = {
-  interno: 'Jogam em ligas do seu país',
-  externo: 'Outras ligas do seu continente',
-  internacional: 'Ligas de outros continentes',
+const MARKET_NOTE = {
+  interno: 'Jogadores de ligas do seu país.',
+  externo: 'Jogadores de outras ligas do seu continente.',
+  internacional: 'Jogadores de ligas de outros continentes.',
+};
+
+// Posições no campo (x: 0 = própria meta, 105 = meta adversária; y: 0-68, esquerda em cima).
+const PITCH_SPOTS = {
+  GK: ['GOL', 7, 34], CB: ['ZAG', 24, 34], LB: ['LE', 30, 11], RB: ['LD', 30, 57], DM: ['VOL', 41, 34],
+  CM: ['MC', 53, 34], AM: ['MEI', 67, 34], LW: ['PE', 80, 11], RW: ['PD', 80, 57], ST: ['CA', 91, 34],
 };
 
 // ---------- utilidades ----------
 const money = (eur) => {
-  if (!Number.isFinite(eur)) return '—';
-  if (eur >= 1e6) return `€ ${(eur / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mi`;
+  if (!Number.isFinite(eur)) return 'sem valor';
+  if (eur >= 1e6) return `€ ${(eur / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
   if (eur >= 1e3) return `€ ${Math.round(eur / 1e3).toLocaleString('pt-BR')} mil`;
   return `€ ${eur.toLocaleString('pt-BR')}`;
 };
 const parseBudget = (s) => Number(String(s).replace(/[^\d]/g, ''));
-const countryName = (code) => meta.countries.find((c) => c.code === code)?.name || code || '—';
+const countryName = (code) => meta.countries.find((c) => c.code === code)?.name || code || null;
 const position = (code) => meta.positions.find((p) => p.code === code);
-const positionName = (code) => position(code)?.name || code || '—';
+const positionName = (code) => position(code)?.name || code || '';
 const charLabel = (code) => meta.characteristics.find((c) => c.code === code)?.label || code;
-const orDash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
-const ageText = (a) => (Number.isFinite(a) ? `${a} anos` : '—');
-const dateBR = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00').toLocaleDateString('pt-BR') : '—');
+const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+const listPT = (items) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} e ${items.at(-1)}`);
+const has = (v) => v !== null && v !== undefined && v !== '';
+const dateBR = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00').toLocaleDateString('pt-BR') : null);
+const sourceName = (s) => ({ tmdata: 'transfermarkt-datasets', demo: 'dados de demonstração (fictícios)' })[s] || s;
 
-const SILHOUETTE = `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
-  <path d="M32 8c-7 0-11 5-11 12s4 13 11 13 11-6 11-13S39 8 32 8Z"/><path d="M10 58c1-12 10-19 22-19s21 7 22 19"/></svg>`;
-
-// Silhueta sempre por baixo; se a foto existir e carregar, ela cobre a silhueta.
+const SILHOUETTE = `<svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><path d="M32 8c-7 0-11 5-11 12s4 13 11 13 11-6 11-13S39 8 32 8Z"/><path d="M10 60c1-12 10-20 22-20s21 8 22 20"/></svg>`;
 function photo(p) {
-  const url = /^https?:\/\//.test(p.photoUrl || '') ? p.photoUrl : null;
-  return `<div class="photo">${SILHOUETTE}${url ? `<img src="${esc(url)}" alt="Foto de ${esc(p.name)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : ''}</div>`;
+  const url = /^https:\/\//.test(p.photoUrl || '') ? p.photoUrl : null;
+  return `<span class="photo">${SILHOUETTE}${url ? `<img src="${esc(url)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : ''}</span>`;
 }
 
-// ---------- roteamento ----------
+// Troca de tela com transição curta quando o navegador permite.
+function paint(fn) {
+  if (document.startViewTransition && !reduceMotion.matches) document.startViewTransition(fn);
+  else fn();
+}
+
+// ---------- rotas ----------
 function route() {
-  const hash = location.hash || '#/';
-  const [path, qs] = hash.slice(1).split('?');
-  window.scrollTo(0, 0);
-  if (path.startsWith('/jogador/')) return renderPlayer(decodeURIComponent(path.slice('/jogador/'.length)));
-  if (path === '/relatorio') return renderReport(new URLSearchParams(qs || ''));
-  return renderHome();
+  const [path, qs] = (location.hash || '#/').slice(1).split('?');
+  if (path.startsWith('/jogador/')) return showPlayer(decodeURIComponent(path.slice('/jogador/'.length)));
+  if (path === '/relatorio') return showReport(new URLSearchParams(qs || ''));
+  return paint(() => { renderHome(); window.scrollTo(0, 0); });
 }
 window.addEventListener('hashchange', route);
+
+// ---------- campo ----------
+function pitchLines(W = 105, H = 68) {
+  return `<g class="lines">
+    <rect x="0" y="0" width="${W}" height="${H}" />
+    <line x1="${W / 2}" y1="0" x2="${W / 2}" y2="${H}" />
+    <circle cx="${W / 2}" cy="${H / 2}" r="9.15" />
+    <rect x="0" y="${H / 2 - 20.16}" width="16.5" height="40.32" />
+    <rect x="${W - 16.5}" y="${H / 2 - 20.16}" width="16.5" height="40.32" />
+    <rect x="0" y="${H / 2 - 9.16}" width="5.5" height="18.32" />
+    <rect x="${W - 5.5}" y="${H / 2 - 9.16}" width="5.5" height="18.32" />
+  </g>`;
+}
+
+function positionPitch(selected) {
+  const spots = Object.entries(PITCH_SPOTS).map(([code, [short, x, y]]) => `
+    <g class="pos-dot" role="radio" tabindex="${code === selected ? 0 : -1}" aria-checked="${code === selected}" data-code="${code}" aria-label="${esc(positionName(code))}">
+      <circle cx="${x}" cy="${y}" r="4.6" /><text x="${x}" y="${y}">${short}</text>
+    </g>`).join('');
+  return `<svg class="pitch" viewBox="-1 -1 107 70" role="radiogroup" aria-label="Posição">
+    <rect class="grass" x="0" y="0" width="105" height="68" />${pitchLines()}${spots}</svg>`;
+}
 
 // ---------- Tela 1: início ----------
 function renderHome() {
@@ -61,92 +92,114 @@ function renderHome() {
   for (const c of meta.countries) (byContinent[c.continent] ||= []).push(c);
   app.innerHTML = `
   <section class="home">
-    <form class="box home-card" id="search" novalidate>
-      <h1 class="wordmark">PASSE</h1>
-      <p class="subtitle">Plataforma de Auxílio ao Scouting para Sociedades Esportivas</p>
-      <div class="home-grid">
-        <div class="col">
-          <label class="box field">
-            <span class="label">Posição</span>
-            <select name="position">${meta.positions.map((p) => `<option value="${p.code}" ${p.code === draft.position ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
-          </label>
-            <label class="box field">
-            <span class="label">Lugar · país do seu clube</span>
-            <select name="country">${Object.entries(byContinent).map(([k, list]) => `<optgroup label="${esc(meta.continents[k])}">${list
-              .slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-              .map((c) => `<option value="${c.code}" ${c.code === draft.country ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>
-          </label>
-          </div>
-        <div class="col">
-          <label class="box field">
-            <span class="label">Valor esperado · teto (€)</span>
-            <input name="budget" type="text" inputmode="numeric" placeholder="ex.: 2.000.000" value="${esc(draft.budget)}" />
-            <small id="budgetHint">${draft.budget ? `Até ${money(parseBudget(draft.budget))}` : 'Valor de mercado máximo do atleta'}</small>
-          </label>
-            <div class="box field">
-            <span class="label" id="chars-label">Seleção e descrição de características</span>
-            <div class="chips" id="chips" role="group" aria-labelledby="chars-label"></div>
-            <textarea name="text" rows="3" maxlength="1000" placeholder="Descreva o jogador: ex. canhoto, rápido, jovem até 23 anos, acima de 1,80">${esc(draft.text)}</textarea>
-            <small>Pé, idade e altura escritos aqui viram filtros.</small>
-          </div>
-          </div>
+    <header class="masthead">
+      <h1 class="display">PASSE</h1>
+      <p>Plataforma de Auxílio ao Scouting para Sociedades Esportivas</p>
+    </header>
+    <form class="brief" id="brief" novalidate>
+      <div class="col">
+        <div class="field">
+          <span class="name" id="pos-label">Posição</span>
+          <div id="pitch">${positionPitch(draft.position)}</div>
+          <span class="position-name" id="pos-name"><b>${esc(positionName(draft.position))}</b></span>
+        </div>
+        <label class="field">
+          <span class="name">Lugar</span>
+          <select class="select" name="country">${Object.entries(byContinent).map(([k, list]) => `<optgroup label="${esc(meta.continents[k])}">${list
+            .slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+            .map((c) => `<option value="${c.code}" ${c.code === draft.country ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>
+          <small>País do seu clube. Define o que é mercado nacional, continental e global.</small>
+        </label>
       </div>
-      <div class="home-actions">
-        <p class="error" id="formError" role="alert"></p>
+      <div class="col">
+        <label class="field">
+          <span class="name">Valor esperado</span>
+          <input class="input num" name="budget" type="text" inputmode="numeric" autocomplete="off" placeholder="2.000.000" value="${esc(draft.budget)}" />
+          <small id="budget-hint">${draft.budget ? `Até ${money(parseBudget(draft.budget))} de valor de mercado.` : 'Valor de mercado máximo, em euros.'}</small>
+        </label>
+        <div class="field">
+          <span class="name" id="chars-label">Características</span>
+          <div class="toggles" id="toggles" role="group" aria-labelledby="chars-label"></div>
+          <small id="chars-note"></small>
+          <textarea class="input" name="text" rows="3" maxlength="1000" aria-label="Descrição do jogador" placeholder="Descreva o jogador. Pé, idade e altura viram filtros: canhoto, até 23 anos, acima de 1,80.">${esc(draft.text)}</textarea>
+        </div>
+      </div>
+      <div class="submit-row">
+        <p class="error" id="form-error" role="alert"></p>
         <button class="btn" type="submit">Gerar relatório</button>
       </div>
     </form>
   </section>`;
 
-  const form = document.getElementById('search');
-  const renderChips = () => {
-    const group = position(form.position.value)?.group;
-    const list = meta.characteristics.filter((c) => c.positions.includes(group));
-    draft.selected = draft.selected.filter((code) => list.some((c) => c.code === code));
-    document.getElementById('chips').innerHTML = list
-      .map((c) => `<button type="button" class="chip" data-code="${c.code}" aria-pressed="${draft.selected.includes(c.code)}">${esc(c.label)}</button>`)
+  const form = document.getElementById('brief');
+  const pitch = document.getElementById('pitch');
+
+  const renderToggles = () => {
+    const group = position(draft.position)?.group;
+    const forPos = meta.characteristics.filter((c) => c.positions.includes(group));
+    const usable = forPos.filter((c) => c.available);
+    const missing = forPos.filter((c) => !c.available);
+    draft.selected = draft.selected.filter((code) => usable.some((c) => c.code === code));
+    document.getElementById('toggles').innerHTML = usable
+      .map((c) => `<button type="button" class="toggle" data-code="${c.code}" aria-pressed="${draft.selected.includes(c.code)}">${esc(c.label)}</button>`)
       .join('');
+    document.getElementById('chars-note').textContent = missing.length
+      ? `${usable.length ? `Com os dados atuais dá para avaliar ${listPT(usable.map((c) => lower(c.label)))}.` : 'Os dados atuais não permitem avaliar características desta posição.'} ${missing.slice(0, 3).map((c) => c.label).map((l, i) => (i ? lower(l) : l)).join(', ')}${missing.length > 3 ? ' e outras' : ''} dependem de estatísticas mais detalhadas.`
+      : '';
   };
-  renderChips();
-  form.position.addEventListener('change', () => { draft.position = form.position.value; renderChips(); });
+  renderToggles();
+
+  const choose = (code, focus) => {
+    draft.position = code;
+    pitch.innerHTML = positionPitch(code);
+    document.getElementById('pos-name').innerHTML = `<b>${esc(positionName(code))}</b>`;
+    renderToggles();
+    if (focus) pitch.querySelector(`[data-code="${code}"]`)?.focus();
+  };
+  pitch.addEventListener('click', (e) => {
+    const dot = e.target.closest('.pos-dot');
+    if (dot) choose(dot.dataset.code, true);
+  });
+  pitch.addEventListener('keydown', (e) => {
+    const codes = Object.keys(PITCH_SPOTS);
+    const i = codes.indexOf(draft.position);
+    if (['ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); choose(codes[(i + 1) % codes.length], true); }
+    if (['ArrowLeft', 'ArrowUp'].includes(e.key)) { e.preventDefault(); choose(codes[(i - 1 + codes.length) % codes.length], true); }
+    if ([' ', 'Enter'].includes(e.key) && e.target.closest('.pos-dot')) { e.preventDefault(); choose(e.target.closest('.pos-dot').dataset.code, true); }
+  });
+
   form.country.addEventListener('change', () => { draft.country = form.country.value; });
   form.text.addEventListener('input', () => { draft.text = form.text.value; });
   form.budget.addEventListener('input', () => {
     const n = parseBudget(form.budget.value);
     form.budget.value = n ? n.toLocaleString('pt-BR') : '';
     draft.budget = form.budget.value;
-    document.getElementById('budgetHint').textContent = n ? `Até ${money(n)}` : 'Valor de mercado máximo do atleta';
+    document.getElementById('budget-hint').textContent = n ? `Até ${money(n)} de valor de mercado.` : 'Valor de mercado máximo, em euros.';
   });
-  document.getElementById('chips').addEventListener('click', (e) => {
-    const b = e.target.closest('.chip');
+  document.getElementById('toggles').addEventListener('click', (e) => {
+    const b = e.target.closest('.toggle');
     if (!b) return;
-    const code = b.dataset.code;
-    const i = draft.selected.indexOf(code);
-    if (i >= 0) draft.selected.splice(i, 1);
-    else draft.selected.push(code);
+    const i = draft.selected.indexOf(b.dataset.code);
+    if (i >= 0) draft.selected.splice(i, 1); else draft.selected.push(b.dataset.code);
     b.setAttribute('aria-pressed', String(i < 0));
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const budget = parseBudget(form.budget.value);
-    const err = document.getElementById('formError');
     if (!budget) {
-      err.textContent = 'Informe o valor esperado (teto em euros).';
+      document.getElementById('form-error').textContent = 'Informe o valor esperado para gerar o relatório.';
       form.budget.focus();
       return;
     }
-    const q = new URLSearchParams({ pais: form.country.value, posicao: form.position.value, teto: String(budget) });
+    const q = new URLSearchParams({ pais: form.country.value, posicao: draft.position, teto: String(budget) });
     if (draft.selected.length) q.set('car', draft.selected.join(','));
     if (form.text.value.trim()) q.set('desc', form.text.value.trim());
-    activeMarket = null;
     location.hash = `#/relatorio?${q}`;
   });
 }
 
 // ---------- Tela 2: relatório ----------
-async function renderReport(params) {
-  document.title = 'Relatório · PASSE';
-  lastReportHash = location.hash;
+async function showReport(params) {
   const body = {
     country: params.get('pais'),
     position: params.get('posicao'),
@@ -162,228 +215,230 @@ async function renderReport(params) {
     text: body.characteristics,
   });
   const key = JSON.stringify(body);
-  let data = lastReport?.key === key ? lastReport.data : null;
-  if (!data) {
-    app.innerHTML = `<div class="loading">Consultando fontes e montando o relatório…</div>`;
+  const returning = report.key === key && report.data;
+  if (!returning) {
+    paint(() => { app.innerHTML = `<p class="loading">Montando o relatório…</p>`; window.scrollTo(0, 0); });
     try {
       const res = await fetch('/api/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      data = await res.json();
-      if (!res.ok) throw new Error((data.errors || ['Erro na busca.']).join(' '));
-      lastReport = { key, data };
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.errors || ['Não foi possível gerar o relatório.']).join(' '));
+      Object.assign(report, { key, data, scrollY: 0, market: Object.keys(meta.markets).find((k) => data.markets[k].length) || 'interno' });
     } catch (ex) {
-      app.innerHTML = `<section class="player"><div class="box empty"><p class="error">${esc(ex.message)}</p><a class="btn ghost" href="#/">Voltar ao início</a></div></section>`;
+      app.innerHTML = `<section class="player"><p class="error">${esc(ex.message)}</p><p><a class="btn line" href="#/">Voltar ao início</a></p></section>`;
       return;
     }
   }
-  if (!activeMarket) activeMarket = Object.keys(meta.markets).find((k) => data.markets[k].length) || 'interno';
-  drawReport(data);
+  report.hash = location.hash;
+  paint(() => {
+    renderReport();
+    window.scrollTo(0, returning ? report.scrollY : 0);
+  });
 }
 
-function drawReport(d) {
+function renderReport() {
+  const d = report.data;
+  document.title = 'Relatório · PASSE';
   const f = d.criteria.filters;
-  const filters = [
-    f.foot && `Pé ${f.foot}`,
-    f.maxAge && `Até ${f.maxAge} anos`,
-    f.minAge && `${f.minAge}+ anos`,
-    f.minHeightCm && `${f.minHeightCm}+ cm`,
-  ].filter(Boolean);
-  const notes = [];
-  if (d.providers.length === 1 && d.providers[0] === 'demo') notes.push('Dados de demonstração: jogadores e clubes fictícios. Configure as fontes reais para o mercado de verdade.');
-  for (const pe of d.providerErrors || []) notes.push(`Fonte "${pe.provider}" indisponível: ${pe.message}`);
-  notes.push(...(d.criteria.warnings || []));
-  if (d.usingPositionProfile) notes.push(`Nenhuma característica escolhida: usamos o perfil típico de ${positionName(d.query.position).toLowerCase()} (${d.desired.map(charLabel).join(', ')}).`);
+  const filters = [f.foot && `pé ${f.foot}`, f.maxAge && `até ${f.maxAge} anos`, f.minAge && `${f.minAge} anos ou mais`, f.minHeightCm && `${f.minHeightCm} cm ou mais`].filter(Boolean);
+  const notices = [];
+  if (d.providers.includes('demo')) notices.push('Estes são jogadores fictícios de demonstração. Rode npm run sync-data para usar dados reais.');
+  for (const pe of d.providerErrors || []) notices.push(`A fonte ${sourceName(pe.provider)} não respondeu: ${pe.message}`);
+  notices.push(...(d.criteria.warnings || []));
+  if (d.ignored?.length) notices.push(`${listPT(d.ignored.map(charLabel))} não ${d.ignored.length > 1 ? 'entraram' : 'entrou'} na busca: a fonte atual não tem estatísticas para avaliar.`);
+  if (d.usingPositionProfile) {
+    notices.push(d.desired.length
+      ? `Sem características escolhidas, o relatório usa o perfil típico de ${lower(positionName(d.query.position))}: ${listPT(d.desired.map((c) => lower(charLabel(c))))}.`
+      : 'Sem características avaliáveis para esta posição, a lista prioriza quem mais jogou na temporada.');
+  }
+  const source = meta.sources?.[0];
 
-  const list = d.markets[activeMarket];
   app.innerHTML = `
   <section class="report">
-    <aside class="side">
-      <a class="logo" href="#/">PASSE</a>
-      <h2>Resumo das escolhas</h2>
+    <aside class="sidebar">
+      <a class="logo display" href="#/">PASSE</a>
       <dl>
         <div><dt>Posição</dt><dd>${esc(positionName(d.query.position))}</dd></div>
         <div><dt>Lugar</dt><dd>${esc(countryName(d.query.country))}</dd></div>
-        <div><dt>Valor esperado</dt><dd>até ${money(d.query.maxBudgetEur)}</dd></div>
-        <div><dt>Características</dt><dd>${d.desired.length ? d.desired.map((c) => `<span class="tag">${esc(charLabel(c))}</span>`).join('') : '—'}</dd></div>
-        ${filters.length ? `<div><dt>Filtros</dt><dd>${filters.map((x) => `<span class="tag">${esc(x)}</span>`).join('')}</dd></div>` : ''}
+        <div><dt>Valor esperado</dt><dd>Até ${money(d.query.maxBudgetEur)}</dd></div>
+        <div><dt>Características</dt><dd>${d.desired.length ? `<span class="wanted">${d.desired.map((c) => `<span>${esc(charLabel(c))}</span>`).join('')}</span>` : 'Nenhuma'}</dd></div>
+        ${filters.length ? `<div><dt>Filtros</dt><dd>${esc(listPT(filters))}</dd></div>` : ''}
         ${d.criteria.text ? `<div><dt>Descrição</dt><dd>“${esc(d.criteria.text)}”</dd></div>` : ''}
       </dl>
-      <a class="btn" href="#/">Editar busca</a>
+      <a class="btn" href="#/">Alterar busca</a>
+      ${source ? `<p class="source">Dados: ${esc(source.info?.name || source.label)}${source.info?.license ? `, licença ${esc(source.info.license)}` : ''}.</p>` : ''}
     </aside>
-    <div class="main">
-      <div class="box banner">
-        <h1>Seu relatório foi feito</h1>
-        <span class="label">${d.total} jogador${d.total === 1 ? '' : 'es'} no perfil</span>
-      </div>
-      ${notes.map((n) => `<div class="note">${esc(n)}</div>`).join('')}
+    <div class="board">
+      <header>
+        <h1 class="display">Seu relatório foi feito</h1>
+        <p class="lede">${d.total.toLocaleString('pt-BR')} jogadores dentro do valor esperado e dos filtros.</p>
+      </header>
+      ${notices.length ? `<div class="notices">${notices.map((n) => `<p class="notice">${esc(n)}</p>`).join('')}</div>` : ''}
       <div class="tabs" role="tablist">
         ${Object.entries(meta.markets).map(([k, label]) => `
-          <button class="tab" role="tab" data-market="${k}" aria-selected="${k === activeMarket}">
-            <span><strong>${esc(label)}</strong><small>${esc(MARKET_HINT[k])}</small></span>
-            <span class="count">${d.markets[k].length}</span>
+          <button class="tab" role="tab" id="tab-${k}" aria-controls="roster" data-market="${k}" aria-selected="${k === report.market}">
+            <span class="t">${esc(label)}</span><span class="c">${d.markets[k].length} jogadores</span>
           </button>`).join('')}
       </div>
-      <div class="cards" role="tabpanel">
-        ${list.length ? list.map(playerCard).join('') : `<div class="box empty">Nenhum jogador neste mercado com esses critérios. Tente aumentar o valor esperado ou escolher outras características.</div>`}
-      </div>
-      <p class="foot-note">Ordenado por encaixe nas características pedidas, não por qualidade geral. Mercado definido pela liga em que o atleta joga.</p>
+      <p class="tab-note" id="tab-note"></p>
+      <ol class="roster" id="roster" role="tabpanel"></ol>
     </div>
   </section>`;
 
+  const drawRoster = () => {
+    const list = d.markets[report.market];
+    document.getElementById('tab-note').textContent = MARKET_NOTE[report.market];
+    document.getElementById('roster').setAttribute('aria-labelledby', `tab-${report.market}`);
+    document.getElementById('roster').innerHTML = list.length
+      ? list.map(rosterRow).join('')
+      : `<li class="empty-state">Ninguém neste mercado com esses critérios. Aumente o valor esperado ou troque as características.</li>`;
+  };
+  drawRoster();
+
   app.querySelector('.tabs').addEventListener('click', (e) => {
     const t = e.target.closest('.tab');
-    if (!t) return;
-    activeMarket = t.dataset.market;
-    drawReport(d);
+    if (!t || t.dataset.market === report.market) return;
+    report.market = t.dataset.market;
+    for (const b of app.querySelectorAll('.tab')) b.setAttribute('aria-selected', String(b === t));
+    paint(drawRoster);
   });
-  app.querySelector('.cards').addEventListener('click', (e) => {
-    const c = e.target.closest('.pcard');
-    if (c) location.hash = `#/jogador/${encodeURIComponent(c.dataset.id)}`;
+  document.getElementById('roster').addEventListener('click', (e) => {
+    const r = e.target.closest('.row');
+    if (!r) return;
+    report.scrollY = window.scrollY;
+    location.hash = `#/jogador/${encodeURIComponent(r.dataset.id)}`;
   });
 }
 
-function playerCard(p) {
+function rosterRow(p) {
   const m = p.match || { matched: [], weakIn: [], desiredCount: 0 };
-  const others = (p.characteristics?.positive || []).filter((c) => !m.matched.includes(c)).slice(0, 3);
+  const where = [p.club, [p.league, countryName(p.leagueCountry)].filter(Boolean).join(', ')].filter(Boolean).join(', ');
+  const who = [Number.isFinite(p.age) && `${p.age} anos`, p.foot && `pé ${p.foot}`].filter(Boolean).join(', ');
+  let fit;
+  if (m.noData) fit = '<span class="quiet">Sem dados de desempenho nesta fonte.</span>';
+  else if (m.desiredCount) {
+    fit = m.matched.length
+      ? `Atende <b>${esc(listPT(m.matched.map((c) => lower(charLabel(c)))))}</b>${m.matched.length < m.desiredCount ? ` (${m.matched.length} de ${m.desiredCount})` : ''}.`
+      : 'Não se destaca nas características pedidas.';
+    if (m.weakIn.length) fit += ` <span class="quiet">Ponto fraco: ${esc(listPT(m.weakIn.map((c) => lower(charLabel(c)))))}.</span>`;
+  } else fit = '';
   return `
-  <button class="box pcard" data-id="${esc(p.id)}">
+  <li><button class="row${m.noData ? ' nodata' : ''}" data-id="${esc(p.id)}">
     ${photo(p)}
-    <div>
-      <div class="pos">${esc(positionName(p.position))} · ${esc(countryName(p.leagueCountry))}</div>
-      <h3>${esc(p.name)}</h3>
-      <div class="meta">${esc(ageText(p.age))} · ${esc(orDash(p.club))} · pé ${esc(orDash(p.foot))}</div>
-      <div class="fit">Atende ${m.matched.length} de ${m.desiredCount} característica${m.desiredCount === 1 ? '' : 's'}</div>
-      <div class="chips">
-        ${m.matched.map((c) => `<span class="tag">${esc(charLabel(c))}</span>`).join('')}
-        ${others.map((c) => `<span class="tag outline">${esc(charLabel(c))}</span>`).join('')}
-        ${m.weakIn.map((c) => `<span class="tag weak">ponto fraco: ${esc(charLabel(c))}</span>`).join('')}
-      </div>
-    </div>
-    <div class="right">
-      <span class="value">${money(p.marketValueEur)}</span>
-      <span class="go">Ver jogador →</span>
-    </div>
-  </button>`;
+    <span>
+      <span class="name">${esc(p.name)}</span>
+      <span class="where">${esc(where)}${who ? `. ${esc(who)}` : ''}</span>
+      ${fit ? `<span class="fit">${fit}</span>` : ''}
+    </span>
+    <span class="value num">${money(p.marketValueEur)}<small>${Number.isFinite(p.minutes) ? `${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)}` : 'valor de mercado'}</small></span>
+  </button></li>`;
 }
 
 // ---------- Tela 3: jogador ----------
-async function renderPlayer(id) {
-  app.innerHTML = `<div class="loading">Carregando jogador…</div>`;
+async function showPlayer(id) {
   let p;
   try {
     const res = await fetch(`/api/players/${encodeURIComponent(id)}`);
     p = await res.json();
     if (!res.ok) throw new Error((p.errors || ['Jogador não encontrado.']).join(' '));
   } catch (ex) {
-    app.innerHTML = `<section class="player"><div class="box empty"><p class="error">${esc(ex.message)}</p><a class="btn ghost" href="${esc(lastReportHash)}">Voltar</a></div></section>`;
+    app.innerHTML = `<section class="player"><p class="error">${esc(ex.message)}</p><p><a class="btn line" href="${esc(report.hash || '#/')}">Voltar</a></p></section>`;
     return;
   }
+  paint(() => { renderPlayer(p); window.scrollTo(0, 0); });
+}
+
+function renderPlayer(p) {
   document.title = `${p.name} · PASSE`;
-  const summary = lastReport && Object.values(lastReport.data.markets).flat().find((x) => x.id === p.id);
-  const chars = p.characteristics || { positive: [], negative: [] };
-  const desired = lastReport?.data.desired || [];
-  const seasons = (p.seasons || []).slice().sort((a, b) => String(b.season).localeCompare(String(a.season)));
-  const links = Object.entries(p.links || {}).filter(([, url]) => /^https?:\/\//.test(url));
+  const inReport = report.data && Object.values(report.data.markets).flat().find((x) => x.id === p.id);
+  const desired = report.data?.desired || [];
+  const chars = p.characteristics || { positive: [], negative: [], source: 'indisponivel' };
+  const seasons = (p.seasons || []).slice();
   const hasRating = seasons.some((s) => Number.isFinite(s.rating));
+  const links = Object.entries(p.links || {}).filter(([, url]) => /^https?:\/\//.test(url));
+  const fact = (label, value) => (has(value) ? `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>` : '');
 
   app.innerHTML = `
   <section class="player">
-    <div class="player-top">
-      <a class="logo" href="#/">PASSE</a>
-      <a class="btn ghost small" href="${esc(lastReportHash)}">← Voltar ao relatório</a>
+    <nav class="player-bar">
+      <a class="logo display" href="#/">PASSE</a>
+      ${report.hash ? `<a class="btn line small" href="${esc(report.hash)}">Voltar ao relatório</a>` : ''}
+    </nav>
+    <header class="hero">
+      ${photo(p)}
+      <div>
+        <h1 class="display">${esc(p.name)}</h1>
+        <dl class="facts">
+          ${fact('Idade', Number.isFinite(p.age) ? `${p.age} anos` : null)}
+          ${fact('Time', p.club)}
+          ${fact('Posição', positionName(p.position))}
+          ${fact('Pé', p.foot)}
+        </dl>
+        <dl class="facts secondary">
+          ${fact('Valor de mercado', Number.isFinite(p.marketValueEur) ? money(p.marketValueEur) : null)}
+          ${fact('Liga', [p.league, countryName(p.leagueCountry)].filter(Boolean).join(', '))}
+          ${fact('Nacionalidade', countryName(p.nationality))}
+          ${fact('Altura', Number.isFinite(p.heightCm) ? `${(p.heightCm / 100).toFixed(2).replace('.', ',')} m` : null)}
+          ${fact('Contrato até', dateBR(p.contractUntil))}
+          ${inReport ? fact('Mercado', meta.markets[inReport.market]) : ''}
+        </dl>
+      </div>
+    </header>
+
+    <div class="sheet">
+      <section>
+        <h2 class="display">Mapa de calor</h2>
+        ${heatmap(p.heatmap)}
+      </section>
+      <section>
+        <h2 class="display">Time e estatística por temporada</h2>
+        ${seasons.length ? `<div class="table-wrap"><table class="seasons">
+          <thead><tr><th>Temporada</th><th>Time</th><th class="n">Jogos</th><th class="n">Min</th><th class="n">Gols</th><th class="n">Assist.</th>${hasRating ? '<th class="n">Nota*</th>' : ''}</tr></thead>
+          <tbody>${seasons.map((s) => `<tr>
+            <td class="num">${esc(s.season)}</td>
+            <td>${esc(s.club || '')}${s.league ? `<small>${esc(s.league)}</small>` : ''}</td>
+            <td class="n">${has(s.appearances) ? s.appearances : ''}</td>
+            <td class="n">${Number.isFinite(s.minutes) ? s.minutes.toLocaleString('pt-BR') : ''}</td>
+            <td class="n">${has(s.goals) ? s.goals : ''}</td>
+            <td class="n">${has(s.assists) ? s.assists : ''}</td>
+            ${hasRating ? `<td class="n">${Number.isFinite(s.rating) ? s.rating.toFixed(2).replace('.', ',') : ''}</td>` : ''}
+          </tr>`).join('')}</tbody></table></div>
+          ${hasRating ? `<p class="src">* Nota média dada pela fonte, não pelo PASSE.</p>` : ''}`
+        : `<p class="unavailable">A fonte não tem partidas registradas deste jogador nas últimas temporadas.</p>`}
+      </section>
+      <section>
+        <h2 class="display">Títulos</h2>
+        ${Array.isArray(p.titles) && p.titles.length
+          ? `<ul class="titles">${p.titles.map((t) => `<li><span class="num">${esc(t.season)}</span><span>${esc(t.name)}${t.club ? `<br><span class="quiet">${esc(t.club)}</span>` : ''}</span></li>`).join('')}</ul>`
+          : `<p class="unavailable">${Array.isArray(p.titles) ? 'Nenhum título registrado na fonte.' : 'A fonte atual não informa títulos.'}</p>`}
+      </section>
+      <section>
+        <h2 class="display">Características</h2>
+        ${chars.source === 'indisponivel'
+          ? `<p class="unavailable">Sem estatísticas suficientes para apontar pontos fortes ou fracos deste jogador.</p>`
+          : `<div class="chars"><h3>Pontos fortes</h3><div class="marks">${chars.positive.length ? chars.positive.map((c) => `<span class="mark${desired.includes(c) ? ' hit' : ''}">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum destaque nas estatísticas disponíveis.</span>'}</div></div>
+             <div class="chars"><h3>Pontos fracos</h3><div class="marks">${chars.negative.length ? chars.negative.map((c) => `<span class="mark weak">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum apontado.</span>'}</div></div>
+             <p class="src">${chars.source === 'estatisticas' ? `Deduzidas de gols e assistências por 90 minutos${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.` : 'Informadas pela fonte.'}${desired.length ? ' Em preto, as que você procurou.' : ''}</p>`}
+      </section>
     </div>
-    <article class="box sheet">
-      <header class="ident">
-        ${photo(p)}
-        <div>
-          <h1>${esc(p.name)}</h1>
-          <dl class="facts">
-            <dt>Idade</dt><dd>${esc(ageText(p.age))}</dd>
-            <dt>Time</dt><dd>${esc(orDash(p.club))}</dd>
-            <dt>Posição</dt><dd>${esc(positionName(p.position))}</dd>
-            <dt>Pé</dt><dd>${esc(orDash(p.foot))}</dd>
-          </dl>
-        </div>
-      </header>
-      <div class="kpis">
-        <span class="kpi"><span>Valor</span>${money(p.marketValueEur)}</span>
-        <span class="kpi"><span>Liga</span>${esc(orDash(p.league))} (${esc(countryName(p.leagueCountry))})</span>
-        <span class="kpi"><span>Nacionalidade</span>${esc(countryName(p.nationality))}</span>
-        <span class="kpi"><span>Altura</span>${Number.isFinite(p.heightCm) ? `${(p.heightCm / 100).toFixed(2).replace('.', ',')} m` : '—'}</span>
-        <span class="kpi"><span>Contrato até</span>${dateBR(p.contractUntil)}</span>
-        ${summary ? `<span class="kpi"><span>Mercado</span>${esc(meta.markets[summary.market])}</span>` : ''}
-      </div>
-      <div class="sheet-grid">
-        <section class="box panel">
-          <h2>Mapa de calor</h2>
-          ${heatmap(p.heatmap)}
-        </section>
-        <section class="box panel">
-          <h2>Time e estatística por temporada</h2>
-          ${seasons.length ? `<div class="table-wrap"><table class="seasons">
-            <thead><tr><th>Temp.</th><th>Time</th><th class="n">J</th><th class="n">Min</th><th class="n">G</th><th class="n">A</th>${hasRating ? '<th class="n">Nota*</th>' : ''}</tr></thead>
-            <tbody>${seasons.map((s) => `<tr>
-              <td class="mono">${esc(s.season)}</td>
-              <td>${esc(orDash(s.club))}<br><small class="label">${esc(orDash(s.league))}</small></td>
-              <td class="n">${esc(orDash(s.appearances))}</td>
-              <td class="n">${Number.isFinite(s.minutes) ? s.minutes.toLocaleString('pt-BR') : '—'}</td>
-              <td class="n">${esc(orDash(s.goals))}</td>
-              <td class="n">${esc(orDash(s.assists))}</td>
-              ${hasRating ? `<td class="n">${Number.isFinite(s.rating) ? s.rating.toFixed(2).replace('.', ',') : '—'}</td>` : ''}
-            </tr>`).join('')}</tbody></table></div>
-            ${hasRating ? `<p class="sub">* Nota média atribuída pela fonte (${esc(p.source)}), não pelo PASSE.</p>` : ''}`
-          : '<p class="sub">A fonte não informou o histórico por temporada.</p>'}
-        </section>
-        <section class="box panel">
-          <h2>Títulos</h2>
-          ${(p.titles || []).length ? `<ul class="titles">${p.titles.map((t) => `<li><span class="yr">${esc(t.season)}</span><span>${esc(t.name)}<small>${esc(orDash(t.club))}</small></span></li>`).join('')}</ul>` : '<p class="sub">Nenhum título informado pela fonte.</p>'}
-        </section>
-        <section class="box panel">
-          <h2>Características</h2>
-          <div class="charset">
-            <div><h3>Pontos fortes</h3><div class="chips">${chars.positive.length ? chars.positive.map((c) => `<span class="tag ${desired.includes(c) ? '' : 'outline'}">${esc(charLabel(c))}</span>`).join('') : '<span class="sub">—</span>'}</div></div>
-            <div><h3>Pontos fracos</h3><div class="chips">${chars.negative.length ? chars.negative.map((c) => `<span class="tag weak">${esc(charLabel(c))}</span>`).join('') : '<span class="sub">Nenhum destacado</span>'}</div></div>
-          </div>
-          <p class="sub">${chars.source === 'estatisticas'
-            ? 'Derivadas das estatísticas por 90 minutos da temporada, comparadas a jogadores da mesma função.'
-            : `Características informadas pela fonte (${esc(p.source)}).`}
-            ${desired.length ? ' Preenchidas em preto: as que você procurou.' : ''}</p>
-        </section>
-      </div>
-      ${links.length ? `<p class="foot-note">${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Ver no ${esc(k)}</a>`).join(' · ')}</p>` : ''}
-      <p class="foot-note">Fonte: ${esc(p.source === 'demo' ? 'dados de demonstração (fictícios)' : p.source)}. Use como apoio à observação do scout.</p>
-    </article>
+
+    <footer class="colophon">
+      <span>Fonte: ${esc(sourceName(p.source))}.</span>
+      ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(k === 'transfermarkt' ? 'Transfermarkt' : k === 'sofascore' ? 'SofaScore' : k)}</a>`).join('')}
+    </footer>
   </section>`;
 }
 
-// Campo 105x68 com pontos de presença (x: 0 = própria meta → 100 = meta adversária).
 function heatmap(h) {
   const pts = h?.points || [];
-  if (!pts.length) return '<p class="sub">A fonte não forneceu mapa de calor para este jogador.</p>';
-  const W = 105, H = 68;
+  if (!pts.length) return `<p class="unavailable">A fonte atual não fornece mapa de calor.</p>`;
   const max = Math.max(...pts.map((p) => p.count || 1));
-  const dots = pts
-    .map((p) => `<circle cx="${(p.x / 100) * W}" cy="${(p.y / 100) * H}" r="5" fill="var(--ink)" fill-opacity="${(0.1 + 0.18 * ((p.count || 1) / max)).toFixed(3)}" />`)
-    .join('');
-  return `
-  <svg class="pitch" viewBox="-2 -2 ${W + 4} ${H + 7}" role="img" aria-label="Mapa de calor: áreas do campo onde o jogador mais atua">
-    <defs>
-      <filter id="blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.6" /></filter>
-      <clipPath id="field"><rect x="0" y="0" width="${W}" height="${H}" /></clipPath>
-    </defs>
-    <rect x="0" y="0" width="${W}" height="${H}" fill="var(--cream-2)" />
-    <g filter="url(#blur)" clip-path="url(#field)">${dots}</g>
-    <g fill="none" stroke="var(--ink)" stroke-width="0.5">
-      <rect x="0" y="0" width="${W}" height="${H}" />
-      <line x1="${W / 2}" y1="0" x2="${W / 2}" y2="${H}" />
-      <circle cx="${W / 2}" cy="${H / 2}" r="9.15" />
-      <rect x="0" y="${H / 2 - 20.16}" width="16.5" height="40.32" />
-      <rect x="${W - 16.5}" y="${H / 2 - 20.16}" width="16.5" height="40.32" />
-      <rect x="0" y="${H / 2 - 9.16}" width="5.5" height="18.32" />
-      <rect x="${W - 5.5}" y="${H / 2 - 9.16}" width="5.5" height="18.32" />
-    </g>
-    <text x="${W}" y="${H + 4}" text-anchor="end" font-size="2.6" fill="var(--muted)" font-family="IBM Plex Mono">ataque →</text>
+  const dots = pts.map((p) => `<circle cx="${(p.x / 100) * 105}" cy="${(p.y / 100) * 68}" r="5" fill="#000" fill-opacity="${(0.1 + 0.2 * ((p.count || 1) / max)).toFixed(3)}" />`).join('');
+  return `<svg class="pitch" viewBox="-1 -1 107 70" role="img" aria-label="Mapa de calor do jogador; o time ataca para a direita">
+    <defs><filter id="blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.6" /></filter><clipPath id="field"><rect width="105" height="68" /></clipPath></defs>
+    <rect class="grass" x="0" y="0" width="105" height="68" />
+    <g filter="url(#blur)" clip-path="url(#field)">${dots}</g>${pitchLines()}
   </svg>
-  ${h.season || h.competition ? `<p class="sub">${esc([h.competition, h.season].filter(Boolean).join(' · '))}</p>` : ''}`;
+  <p class="src">${esc([h.competition, h.season].filter(Boolean).join(', '))}${h.competition || h.season ? '. ' : ''}O time ataca para a direita.</p>`;
 }
 
 // ---------- início ----------
@@ -392,6 +447,6 @@ function heatmap(h) {
     meta = await (await fetch('/api/meta')).json();
     route();
   } catch (e) {
-    app.innerHTML = `<div class="loading">Falha ao iniciar: ${esc(e.message)}</div>`;
+    app.innerHTML = `<p class="loading">Não foi possível carregar o PASSE: ${esc(e.message)}</p>`;
   }
 })();
