@@ -1,5 +1,6 @@
 import { allowedBaseUrl, createHttpClient, positiveNumber } from './httpClient.js';
 import { footCode, matchesQuery, numberOrNull, per90, positionCode, readCatalog } from './normalization.js';
+import { normalizeSeasons, safeUrl } from './dashboard.js';
 
 // API-Sports v3, endpoint oficial /players, autenticação x-apisports-key.
 export function createApiFootballProvider({ env = process.env, clientFactory = createHttpClient } = {}) {
@@ -40,9 +41,9 @@ export function createApiFootballProvider({ env = process.env, clientFactory = c
     return data;
   }
   function normalize(row, league, c) {
-    const player = row.player;
+    const player = row?.player;
     if (!player || !/^\d+$/.test(String(player.id)) || typeof player.name !== 'string') return null;
-    const s = row.statistics?.find((s) => String(s.league?.id) === league.id && String(s.league?.season) === c.season);
+    const s = row.statistics?.find((s) => s && String(s.league?.id) === league.id && String(s.league?.season) === c.season);
     if (!s) return null;
     const extra = c.metadata[player.id] || {};
     // A API dá posições amplas (Defender/Midfielder/Attacker), não lateral/zagueiro etc.
@@ -67,7 +68,14 @@ export function createApiFootballProvider({ env = process.env, clientFactory = c
       foot: footCode(extra.foot), heightCm: numberOrNull(String(player.height || '').replace(/\s*cm$/, '')),
       position, club: s.team?.name || null, league: league.name, leagueCountry: league.country,
       marketValueEur: numberOrNull(extra.marketValueEur), contractUntil: extra.contractUntil || null,
-      season: c.season, appearances: numberOrNull(s.games?.appearences ?? s.games?.appearances), minutes, stats, links: {} };
+      season: c.season, appearances: numberOrNull(s.games?.appearences ?? s.games?.appearances), minutes, stats, links: {},
+      photoUrl: safeUrl(player.photo), characteristics: null, heatmap: null, titles: [],
+      seasons: normalizeSeasons(row.statistics.filter(Boolean).map((entry) => ({
+        season: entry.league?.season, club: entry.team?.name,
+        league: entry.league?.name || c.leagues.find((l) => l.id === String(entry.league?.id))?.name,
+        appearances: entry.games?.appearences ?? entry.games?.appearances, minutes: entry.games?.minutes,
+        goals: entry.goals?.total, assists: entry.goals?.assists, rating: entry.games?.rating,
+      }))) };
   }
   return {
     name: 'api-football', label: 'API-Football (API-Sports v3)',

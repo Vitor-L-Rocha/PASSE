@@ -9,7 +9,21 @@
 // Player (formato normalizado usado em todo o PASSE):
 //   { id, source, name, age, nationality, foot, heightCm, position, club, league,
 //     leagueCountry, marketValueEur, contractUntil, season, appearances, minutes,
-//     stats: { ...ver src/core/attributes.js }, links: { transfermarkt?, sofascore? } }
+//     stats: { ...ver src/core/attributes.js }, links: { transfermarkt?, sofascore? },
+//
+//     -- campos do dashboard (opcionais; null/[] quando a fonte não fornece) --
+//     photoUrl: string | null,
+//     characteristics: { positive: string[], negative: string[], source: 'fonte'|'estatisticas' } | null,
+//         códigos de src/data/characteristics.js (ordem = relevância). Se a fonte não
+//         fornece, o núcleo deriva de `stats` (src/core/characteristics.js).
+//     seasons: [{ season, club, league, appearances, minutes, goals, assists,
+//                 rating /* nota média da FONTE, ex. SofaScore; null se não houver */ }],
+//     titles: [{ name, season, club }],
+//     heatmap: { season, competition, points: [{ x: 0-100, y: 0-100, count }] } | null
+//         (formato de pontos do SofaScore; x = comprimento do campo, ataque à direita)
+//   }
+//
+// No resumo (listagem) só vão campos leves; o detalhe completo vem de getPlayer(id).
 //
 // `leagueCountry` (código ISO-2 de src/data/countries.js) é o que define o mercado.
 //
@@ -20,6 +34,7 @@
 import { demoProvider } from './demoProvider.js';
 import { transfermarktProvider } from './transfermarktProvider.js';
 import { apiFootballProvider } from './apiFootballProvider.js';
+import { sofascoreProvider } from './sofascoreProvider.js';
 
 const REGISTRY = new Map();
 
@@ -31,7 +46,7 @@ export function registerProvider(provider) {
   REGISTRY.set(provider.name, provider);
 }
 
-for (const provider of [demoProvider, transfermarktProvider, apiFootballProvider]) registerProvider(provider);
+for (const provider of [demoProvider, transfermarktProvider, apiFootballProvider, sofascoreProvider]) registerProvider(provider);
 
 export function activeProviders() {
   const names = (process.env.PASSE_PROVIDERS || 'demo')

@@ -1,5 +1,6 @@
 import { allowedBaseUrl, createHttpClient, positiveNumber } from './httpClient.js';
 import { footCode, matchesQuery, numberOrNull, per90, positionCode, readCatalog } from './normalization.js';
+import { normalizeSeasons, normalizeTitles, safeUrl } from './dashboard.js';
 
 // Compatível com felipeall/transfermarkt-api v4 (JSON camelCase).
 // A instância deve ter autorização para fornecer esses dados ao PASSE.
@@ -34,12 +35,19 @@ export function createTransfermarktProvider({ env = process.env, clientFactory =
       club: club.name, league: club.league, leagueCountry: club.country,
       marketValueEur: numberOrNull(row.marketValue), contractUntil: row.contract || null,
       season, appearances: null, minutes: null, stats: {},
+      photoUrl: safeUrl(row.imageUrl), characteristics: null, seasons: [], titles: [], heatmap: null,
       links: { transfermarkt: `https://www.transfermarkt.com/-/profil/spieler/${row.id}` } };
   }
-  async function addStats(player, club, c) {
-    const data = await http(c).get(`players/${player.id.slice('transfermarkt-'.length)}/stats`);
+  function withStats(player, club, c, data) {
     if (!Array.isArray(data?.stats)) throw new Error('transfermarkt: formato de estatísticas inválido');
-    const rows = data.stats.filter((s) => String(s.clubId) === club.id &&
+    const seasons = normalizeSeasons(data.stats.filter(Boolean).map((s) => ({
+      season: s.seasonId,
+      club: c.clubs.find((candidate) => candidate.id === String(s.clubId))?.name || null,
+      league: s.competitionName || (String(s.competitionId) === club.competitionId ? club.league : null),
+      appearances: s.appearances, minutes: s.minutesPlayed, goals: s.goals, assists: s.assists, rating: null,
+    })));
+    player = { ...player, seasons };
+    const rows = data.stats.filter((s) => s && String(s.clubId) === club.id &&
       String(s.competitionId) === club.competitionId && String(s.seasonId) === c.season);
     if (!rows.length) return player;
     const sum = (key) => rows.every((s) => numberOrNull(s[key]) != null)
@@ -48,12 +56,36 @@ export function createTransfermarktProvider({ env = process.env, clientFactory =
     return { ...player, appearances: sum('appearances'), minutes,
       stats: { goals: per90(sum('goals'), minutes), assists: per90(sum('assists'), minutes) } };
   }
+  async function addStats(player, club, c) {
+    const data = await http(c).get(`players/${player.id.slice('transfermarkt-'.length)}/stats`);
+    return withStats(player, club, c, data);
+  }
+  async function dashboard(player, club, c) {
+    const id = player.id.slice('transfermarkt-'.length);
+    const [stats, achievements, profile] = await Promise.allSettled([
+      http(c).get(`players/${id}/stats`), http(c).get(`players/${id}/achievements`),
+      player.photoUrl ? Promise.resolve(null) : http(c).get(`players/${id}/profile`),
+    ]);
+    if (stats.status === 'fulfilled') {
+      try { player = withStats(player, club, c, stats.value); } catch { /* detalhe opcional indisponível */ }
+    }
+    if (achievements.status === 'fulfilled' && Array.isArray(achievements.value?.achievements)) {
+      player = { ...player, titles: normalizeTitles(achievements.value.achievements.flatMap((a) => {
+        if (!a || typeof a.title !== 'string') return [];
+        if (!Array.isArray(a.details) || !a.details.length) return [{ name: a.title }];
+        return a.details.filter(Boolean).map((d) => ({ name: a.title,
+          season: d.season?.name || d.season?.id, club: d.club?.name }));
+      })) };
+    }
+    if (profile.status === 'fulfilled' && !player.photoUrl) player = { ...player, photoUrl: safeUrl(profile.value?.imageUrl) };
+    return player;
+  }
   async function squad(club, c, query, wantedId) {
     const data = await http(c).get(`clubs/${club.id}/players`, { season_id: c.season });
     if (!Array.isArray(data?.players)) throw new Error('transfermarkt: formato de elenco inválido');
     const players = data.players.filter((row) => row && (!wantedId || `transfermarkt-${row.id}` === wantedId))
       .map((row) => normalize(row, club, c.season)).filter((p) => p && matchesQuery(p, query));
-    if (env.PASSE_TRANSFERMARKT_INCLUDE_STATS !== 'true') return players;
+    if (wantedId || env.PASSE_TRANSFERMARKT_INCLUDE_STATS !== 'true') return players;
     const result = [];
     for (const player of players) result.push(await addStats(player, club, c));
     return result;
@@ -75,7 +107,7 @@ export function createTransfermarktProvider({ env = process.env, clientFactory =
       if (!c.enabled) return null;
       for (const club of c.clubs) {
         const [player] = await squad(club, c, {}, id);
-        if (player) return player;
+        if (player) return dashboard(player, club, c);
       }
       return null;
     },
