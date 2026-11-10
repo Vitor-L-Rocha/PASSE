@@ -88,6 +88,8 @@ export function deriveCharacteristics(player) {
   const entries = Object.entries(sc).filter(
     ([code, v]) => v !== null && (!group || getCharacteristic(code)?.positions.includes(group))
   );
+  // Sem nenhuma estatística utilizável: não dá para afirmar pontos fortes nem fracos.
+  if (entries.length === 0) return { positive: [], negative: [], source: 'indisponivel' };
   const positive = entries
     .filter(([, v]) => v >= STRONG)
     .sort((x, y) => y[1] - x[1])

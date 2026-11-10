@@ -28,13 +28,16 @@
 // `leagueCountry` (código ISO-2 de src/data/countries.js) é o que define o mercado.
 //
 // Provedores ativos: variável PASSE_PROVIDERS (lista separada por vírgula).
-// Padrão: "demo". Provedores externos são integrados pelo responsável de integração
+// Padrão: "tmdata" (dados reais e abertos, ver scripts/sync-data.js); se o índice ainda
+// não foi sincronizado, cai para "demo" (fictício). Provedores externos são integrados pelo responsável de integração
 // e devem respeitar os termos de uso de cada plataforma.
 
 import { demoProvider } from './demoProvider.js';
 import { transfermarktProvider } from './transfermarktProvider.js';
 import { apiFootballProvider } from './apiFootballProvider.js';
 import { sofascoreProvider } from './sofascoreProvider.js';
+import { tmdataProvider } from './tmdataProvider.js';
+import { CHARACTERISTICS } from '../data/characteristics.js';
 
 const REGISTRY = new Map();
 
@@ -46,10 +49,11 @@ export function registerProvider(provider) {
   REGISTRY.set(provider.name, provider);
 }
 
-for (const provider of [demoProvider, transfermarktProvider, apiFootballProvider, sofascoreProvider]) registerProvider(provider);
+for (const provider of [tmdataProvider, demoProvider, transfermarktProvider, apiFootballProvider, sofascoreProvider]) registerProvider(provider);
 
 export function activeProviders() {
-  const names = (process.env.PASSE_PROVIDERS || 'demo')
+  const fallback = tmdataProvider.isEnabled() ? 'tmdata' : 'demo';
+  const names = (process.env.PASSE_PROVIDERS || fallback)
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -80,4 +84,20 @@ export async function getPlayerById(id) {
     .find((p) => String(id).startsWith(`${p.name}-`));
   if (!provider) return null;
   return provider.getPlayer(id);
+}
+
+// Características que as fontes ativas conseguem sustentar. Provedores sem a lista
+// `characteristics` (demo, SofaScore) cobrem todo o vocabulário; o enriquecimento
+// SofaScore habilitado também cobre tudo.
+export function availableCharacteristics() {
+  const all = CHARACTERISTICS.map((c) => c.code);
+  const providers = activeProviders();
+  let sofascoreOn = false;
+  try { sofascoreOn = sofascoreProvider.isEnabled(); } catch { /* desabilitado */ }
+  if (sofascoreOn || providers.some((p) => !Array.isArray(p.characteristics))) return all;
+  return all.filter((c) => providers.some((p) => p.characteristics.includes(c)));
+}
+
+export function sourcesInfo() {
+  return activeProviders().map((p) => ({ name: p.name, label: p.label || p.name, ...(typeof p.info === 'function' ? { info: p.info() } : {}) }));
 }

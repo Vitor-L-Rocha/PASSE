@@ -8,7 +8,7 @@ import { MARKETS } from './core/markets.js';
 import { parseCriteria } from './core/criteria.js';
 import { rankPlayers } from './core/matcher.js';
 import { characteristicsOf } from './core/characteristics.js';
-import { searchAll, getPlayerById } from './providers/index.js';
+import { searchAll, getPlayerById, availableCharacteristics, sourcesInfo } from './providers/index.js';
 import { enrichPlayerWithSofascore } from './providers/sofascoreProvider.js';
 
 // Acrescenta características/mapa de calor do feed autorizado do SofaScore a jogadores
@@ -28,7 +28,11 @@ export function createApp() {
       countries: COUNTRIES,
       continents: CONTINENTS,
       positions: POSITIONS.map(({ code, name, group }) => ({ code, name, group })),
-      characteristics: CHARACTERISTICS.map(({ code, label, positions }) => ({ code, label, positions })),
+      characteristics: (() => {
+        const available = availableCharacteristics();
+        return CHARACTERISTICS.map(({ code, label, positions }) => ({ code, label, positions, available: available.includes(code) }));
+      })(),
+      sources: sourcesInfo(),
       markets: MARKETS,
     });
   });
@@ -53,7 +57,7 @@ export function createApp() {
       const { errors: providerErrors, providers } = found;
       // Enriquecer ANTES do ranking: o relatório e a ficha usam as mesmas características.
       const players = await Promise.all(found.players.map(enrich));
-      const ranking = rankPlayers(players, { country, maxBudgetEur: budget, position, criteria });
+      const ranking = rankPlayers(players, { country, maxBudgetEur: budget, position, criteria, available: availableCharacteristics() });
       for (const k of Object.keys(ranking.markets)) {
         ranking.markets[k] = ranking.markets[k].slice(0, MAX_RESULTS_PER_MARKET).map(summary);
       }
@@ -80,8 +84,8 @@ export function createApp() {
 
 // Versão compacta para a listagem; o dashboard busca o detalhe completo.
 function summary(p) {
-  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics } = p;
-  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics };
+  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics, season, minutes, appearances } = p;
+  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics, season: season ?? null, minutes: minutes ?? null, appearances: appearances ?? null };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

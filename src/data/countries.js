@@ -44,6 +44,13 @@ export const COUNTRIES = [
   { code: 'UA', name: 'Ucrânia', continent: 'EU' },
   { code: 'RS', name: 'Sérvia', continent: 'EU' },
   { code: 'HR', name: 'Croácia', continent: 'EU' },
+  { code: 'SCT', name: 'Escócia', continent: 'EU' }, // liga própria; código não-ISO de propósito
+  { code: 'NO', name: 'Noruega', continent: 'EU' },
+  { code: 'SE', name: 'Suécia', continent: 'EU' },
+  { code: 'PL', name: 'Polônia', continent: 'EU' },
+  { code: 'RO', name: 'Romênia', continent: 'EU' },
+  { code: 'CZ', name: 'República Tcheca', continent: 'EU' },
+  { code: 'RU', name: 'Rússia', continent: 'EU' },
   // África
   { code: 'EG', name: 'Egito', continent: 'AF' },
   { code: 'MA', name: 'Marrocos', continent: 'AF' },

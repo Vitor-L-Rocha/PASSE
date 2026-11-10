@@ -7,9 +7,11 @@
     "test": "test"
   },
   "scripts": {
+    "sync-data": "node scripts/sync-data.js",
+    "prestart": "node scripts/sync-data.js --if-missing",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/"
+    "test": "node --import ./test/setup.js --test test/"
   },
   "repository": {
     "type": "git",

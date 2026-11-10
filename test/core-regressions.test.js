@@ -57,7 +57,7 @@ test('características: fonte tem prioridade, códigos desconhecidos são descar
   const fromSource = characteristicsOf({ ...player, characteristics: { positive: ['desarme', 'xyz'], negative: ['passe'] } });
   assert.deepEqual(fromSource, { positive: ['desarme'], negative: ['passe'], source: 'fonte' });
   const derived = characteristicsOf({ ...player, stats: { tackles: NaN, interceptions: Infinity, rating: 'x' } });
-  assert.equal(derived.source, 'estatisticas');
+  assert.equal(derived.source, 'indisponivel', 'sem stats utilizáveis não há características');
   assert.deepEqual(derived.positive, []);
   const m = matchPlayer({ ...player, characteristics: { positive: ['desarme', 'cabeceio'], negative: ['passe'] } }, ['cabeceio', 'passe', 'velocidade']);
   assert.deepEqual(m.matched, ['cabeceio']);
@@ -71,4 +71,15 @@ test('ranking por características: exige ao menos uma pedida e ordena por quant
   const r = rankPlayers([a, b, c], { country: 'PT', criteria: { characteristics: ['desarme', 'cabeceio'] } });
   assert.deepEqual(r.markets.interno.map((p) => p.id), ['b', 'a']);
   assert.equal(r.usingPositionProfile, false);
+});
+
+test('jogadores sem dados de desempenho entram no fim; características indisponíveis na fonte são ignoradas', () => {
+  const withData = { ...player, id: 'com', minutes: 2000, characteristics: { positive: ['desarme'], negative: [] } };
+  const noData = { ...player, id: 'sem', minutes: null, stats: {} };
+  const other = { ...player, id: 'outro', characteristics: { positive: ['passe'], negative: [] } };
+  const r = rankPlayers([noData, other, withData], { country: 'PT', criteria: { characteristics: ['desarme', 'drible'] }, available: ['desarme', 'passe'] });
+  assert.deepEqual(r.markets.interno.map((p) => p.id), ['com', 'sem']);
+  assert.equal(r.markets.interno[1].match.noData, true);
+  assert.deepEqual(r.desired, ['desarme']);
+  assert.deepEqual(r.ignored, ['drible']);
 });
