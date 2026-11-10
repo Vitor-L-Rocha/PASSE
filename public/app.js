@@ -14,12 +14,15 @@ let activeMarket = 'interno';
 let lastQueryKey = '';
 
 const money = (eur) => {
+  if (!Number.isFinite(eur)) return '—';
   if (eur >= 1e6) return `€ ${(eur / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mi`;
   if (eur >= 1e3) return `€ ${Math.round(eur / 1e3).toLocaleString('pt-BR')} mil`;
   return `€ ${eur}`;
 };
 const countryName = (code) => meta.countries.find((c) => c.code === code)?.name || code || '—';
 const positionName = (code) => meta.positions.find((p) => p.code === code)?.name || code;
+const ageText = (a) => (Number.isFinite(a) ? `${a} anos` : 'idade n/d');
+const footText = (f) => (f ? `pé ${f}` : 'pé n/d');
 const parseBudget = (s) => Number(String(s).replace(/[^\d]/g, ''));
 
 async function init() {
@@ -149,7 +152,7 @@ function card(p, i) {
       <span class="rank">${i + 1}</span>
       <span class="who">
         <strong>${esc(p.name)}</strong>
-        <span>${esc(p.club)} · ${esc(countryName(p.leagueCountry))} · ${p.age} anos · pé ${esc(p.foot)}</span>
+        <span>${esc(p.club || '—')} · ${esc(countryName(p.leagueCountry))} · ${esc(ageText(p.age))} · ${esc(footText(p.foot))}</span>
         <span class="traits">${(p.strengths || []).map((s) => `<i>${esc(s.label)} ${s.value}</i>`).join('')}</span>
       </span>
       <span class="value">${money(p.marketValueEur)}<small>valor de mercado</small></span>
@@ -208,7 +211,7 @@ function dashboard(p, summary, market) {
     <div class="dash-head">
       <div>
         <h1>${esc(p.name)} <span class="badge">${esc(meta.markets[market])}</span></h1>
-        <p>${esc(positionName(p.position))} · ${esc(p.club)} · ${esc(p.league)} (${esc(countryName(p.leagueCountry))})</p>
+        <p>${esc(positionName(p.position))} · ${esc(p.club || '—')} · ${esc(p.league || '—')} (${esc(countryName(p.leagueCountry))})</p>
       </div>
       <button class="close" data-close aria-label="Fechar">×</button>
     </div>
@@ -216,12 +219,12 @@ function dashboard(p, summary, market) {
       <div class="kpis">
         ${kpi('Aderência', summary ? summary.fit : '—')}
         ${kpi('Valor de mercado', money(p.marketValueEur))}
-        ${kpi('Idade', `${p.age} anos`)}
+        ${kpi('Idade', Number.isFinite(p.age) ? `${p.age} anos` : '—')}
         ${kpi('Nacionalidade', countryName(p.nationality))}
         ${kpi('Altura', p.heightCm ? `${(p.heightCm / 100).toFixed(2).replace('.', ',')} m` : '—')}
         ${kpi('Pé', p.foot || '—')}
-        ${kpi('Contrato até', p.contractUntil ? new Date(p.contractUntil + 'T00:00').toLocaleDateString('pt-BR') : '—')}
-        ${kpi(`Temporada ${esc(p.season || '')}`, `${p.appearances ?? '—'} jogos · ${(p.minutes ?? 0).toLocaleString('pt-BR')} min`)}
+        ${kpi('Contrato até', p.contractUntil ? new Date(String(p.contractUntil).slice(0, 10) + 'T00:00').toLocaleDateString('pt-BR') : '—')}
+        ${kpi(`Temporada ${esc(p.season || '')}`, Number.isFinite(p.minutes) ? `${p.appearances ?? '—'} jogos · ${p.minutes.toLocaleString('pt-BR')} min` : 'sem dados')}
       </div>
       <div class="dash-grid">
         <div class="box"><h3>Perfil de atributos</h3>${radar(attrs.map(([k, label]) => [label, p.attributes[k] ?? 0]))}</div>
@@ -230,9 +233,10 @@ function dashboard(p, summary, market) {
         </div></div>
       </div>
       <div class="box"><h3>Estatísticas da temporada</h3><div class="bars">
-        ${statRows.map(([l, v, max, fmt]) => bar(l, v ?? 0, max, fmt)).join('')}
+        ${statRows.map(([l, v, max, fmt]) => bar(l, v, max, fmt)).join('')}
       </div></div>
       ${links.length ? `<div class="links">${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Ver no ${esc(k)}</a>`).join('')}</div>` : ''}
+      ${Object.values(s).some(Number.isFinite) ? '' : '<div class="warn">Sem estatísticas desta fonte: os atributos exibidos são neutros (50) e não representam desempenho observado.</div>'}
       <p class="disclaimer">Fonte: ${esc(p.source === 'demo' ? 'dados de demonstração (fictícios)' : p.source)}. Atributos derivados das estatísticas por 90 minutos; use como apoio, não como substituto da observação do scout.</p>
     </div>`;
 }
@@ -240,6 +244,7 @@ function dashboard(p, summary, market) {
 const kpi = (label, value) => `<div class="kpi"><small>${esc(label)}</small><strong>${esc(value)}</strong></div>`;
 
 function bar(label, value, max, fmt) {
+  if (!Number.isFinite(value)) return `<div class="bar"><span>${esc(label)}</span><span class="track"></span><b>—</b></div>`;
   const w = Math.max(0, Math.min(100, (value / max) * 100));
   return `<div class="bar"><span>${esc(label)}</span><span class="track"><i style="width:${w}%"></i></span><b>${esc(fmt(value))}</b></div>`;
 }
