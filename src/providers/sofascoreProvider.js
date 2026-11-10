@@ -1,4 +1,4 @@
-import { getCharacteristic } from '../data/characteristics.js';
+import { CHARACTERISTICS, getCharacteristic } from '../data/characteristics.js';
 import { getCountry } from '../data/countries.js';
 import { allowedBaseUrl, createHttpClient, positiveNumber } from './httpClient.js';
 import { footCode, matchesQuery, numberOrNull, positionCode } from './normalization.js';
@@ -96,6 +96,12 @@ export function createSofascoreProvider({ env = process.env, clientFactory = cre
   }
   return {
     name: 'sofascore', label: 'SofaScore (feed autorizado)',
+    enrichmentCharacteristics(providers = []) {
+      const c = config();
+      // URL/chave sem associação de IDs não torna características pesquisáveis.
+      return c.enabled && Object.keys(c.playerIds).some((id) => providers.some((p) => id.startsWith(`${p.name}-`)))
+        ? CHARACTERISTICS.map((c) => c.code) : [];
+    },
     isEnabled: () => config().enabled,
     async searchPlayers(query = {}) {
       const c = config();

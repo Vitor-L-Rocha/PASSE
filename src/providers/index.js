@@ -52,8 +52,8 @@ export function registerProvider(provider) {
 for (const provider of [tmdataProvider, demoProvider, transfermarktProvider, apiFootballProvider, sofascoreProvider]) registerProvider(provider);
 
 export function activeProviders() {
-  const fallback = tmdataProvider.isEnabled() ? 'tmdata' : 'demo';
-  const names = (process.env.PASSE_PROVIDERS || fallback)
+  const configured = process.env.PASSE_PROVIDERS?.trim();
+  const names = (configured || (tmdataProvider.isEnabled() ? 'tmdata' : 'demo'))
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -88,16 +88,21 @@ export async function getPlayerById(id) {
 
 // Características que as fontes ativas conseguem sustentar. Provedores sem a lista
 // `characteristics` (demo, SofaScore) cobrem todo o vocabulário; o enriquecimento
-// SofaScore habilitado também cobre tudo.
+// SofaScore habilitado com IDs associados a uma fonte ativa também cobre tudo.
 export function availableCharacteristics() {
   const all = CHARACTERISTICS.map((c) => c.code);
   const providers = activeProviders();
-  let sofascoreOn = false;
-  try { sofascoreOn = sofascoreProvider.isEnabled(); } catch { /* desabilitado */ }
-  if (sofascoreOn || providers.some((p) => !Array.isArray(p.characteristics))) return all;
-  return all.filter((c) => providers.some((p) => p.characteristics.includes(c)));
+  const sofa = REGISTRY.get('sofascore');
+  let enriched = [];
+  try { enriched = sofa?.enrichmentCharacteristics?.(providers) || []; } catch { /* desabilitado */ }
+  if (providers.some((p) => !Array.isArray(p.characteristics))) return all;
+  return all.filter((c) => enriched.includes(c) || providers.some((p) => p.characteristics.includes(c)));
 }
 
 export function sourcesInfo() {
-  return activeProviders().map((p) => ({ name: p.name, label: p.label || p.name, ...(typeof p.info === 'function' ? { info: p.info() } : {}) }));
+  return activeProviders().map((p) => {
+    let info;
+    try { if (typeof p.info === 'function') info = p.info(); } catch { info = null; }
+    return { name: p.name, label: p.label || p.name, ...(info !== undefined ? { info } : {}) };
+  });
 }

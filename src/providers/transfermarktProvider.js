@@ -92,6 +92,7 @@ export function createTransfermarktProvider({ env = process.env, clientFactory =
   }
   return {
     name: 'transfermarkt', label: 'Transfermarkt (instância autorizada)',
+    get characteristics() { return env.PASSE_TRANSFERMARKT_INCLUDE_STATS === 'true' ? ['finalizacao', 'criacao'] : []; },
     isEnabled: () => config().enabled,
     async searchPlayers(query = {}) {
       const c = config();

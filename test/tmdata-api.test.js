@@ -9,7 +9,7 @@ import { createApp } from '../src/server.js';
 test('API tmdata: mercados, filtros, características ignoradas e ficha', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'passe-tmdata-api-'));
   const previous = { providers: process.env.PASSE_PROVIDERS, dir: process.env.PASSE_TMDATA_DIR };
-  const basePlayer = { source: 'tmdata', position: 'ST', age: 22, foot: 'esquerdo', marketValueEur: 100, minutes: 900, stats: { goals: 0.8, assists: 0.1 }, seasons: [] };
+  const basePlayer = { source: 'tmdata', name: 'Jogador do teste', position: 'ST', age: 22, foot: 'esquerdo', marketValueEur: 100, minutes: 900, stats: { goals: 0.8, assists: 0.1 }, seasons: [] };
   const players = [
     { ...basePlayer, id: 'tmdata-1', name: 'Com dados', nationality: 'PT', leagueCountry: 'BR' },
     { ...basePlayer, id: 'tmdata-2', name: 'Sem dados', nationality: 'BR', leagueCountry: 'BR', minutes: null, stats: {} },

@@ -15,14 +15,18 @@ O PASSE usa por padrão o projeto aberto
 [transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets),
 publicado em domínio público (**CC0 1.0**). `npm run sync-data` baixa as tabelas e
 gera um índice local em `.cache/tmdata/players.json` (fora do Git), com cerca de
-**24 mil jogadores em atividade de 31 ligas** (Brasil, Argentina, México, MLS,
+**24 mil jogadores em atividade no snapshot de 31 ligas** (Brasil, Argentina, México, MLS,
 Japão, Coreia, Arábia Saudita, Austrália e as principais da Europa).
 
 - **Para todos os jogadores:** nome, idade, posição detalhada, pé, altura, clube, liga,
   valor de mercado, fim de contrato, nacionalidade e foto.
-- **Gols, assistências e minutos por temporada:** só para as ligas europeias em que o
-  dataset registra cada partida. Nas demais (Brasileirão, por exemplo) o jogador aparece
-  no relatório marcado como "sem dados de desempenho nesta fonte".
+- **Gols, assistências e minutos por temporada:** a cobertura de atuações é parcial,
+  concentrada nas ligas europeias. Jogadores transferidos podem ter estatísticas de
+  clubes anteriores. Sem estatísticas utilizáveis, o relatório marca o jogador como
+  "sem dados de desempenho nesta fonte". O histórico separa clube, competição e
+  temporada; não atribui totais de copas ao nome de uma liga. Taxas por 90 somam
+  clubes/competições do mesmo período, com pelo menos 450 minutos, sem misturar
+  temporadas de ano civil e temporadas europeias só porque têm o mesmo ID bruto.
 - **Características avaliáveis:** finalização e criação de jogadas (gols e assistências
   por 90 minutos, nas duas últimas temporadas, com no mínimo 450 minutos). As demais
   dependem de uma fonte com estatísticas detalhadas (feed SofaScore autorizado ou
@@ -30,8 +34,17 @@ Japão, Coreia, Arábia Saudita, Austrália e as principais da Europa).
 - **Não disponíveis nesta fonte:** mapa de calor e títulos.
 - O dataset está atualizado até **julho de 2026**; o mantenedor pausou as coletas. Rode
   `npm run sync-data` de novo para pegar atualizações quando voltarem.
+  Clube, contrato e valor refletem esse snapshot, não confirmação em tempo real.
+  `generatedAt` é a geração local; `source.lastGameDate` e `lastAppearanceDate`
+  indicam as datas dos jogos e atuações efetivamente usados no índice.
 
-Sem o índice, o PASSE usa jogadores fictícios (`demo`), também usados nos testes.
+Sem índice válido, a seleção automática usa jogadores fictícios (`demo`), também
+usados nos testes. `PASSE_PROVIDERS=tmdata` exige explicitamente a fonte real e
+não troca para demo. Diretório relativo em `PASSE_TMDATA_DIR` é resolvido a partir
+da raiz do projeto, igualmente no sync e no servidor. O índice schema v2 é gravado
+atomicamente; falhas de parsing/download preservam o anterior. `npm start`
+reconstrói índices antigos/inválidos; `npm run sync-data` reconstrói a qualquer
+momento (reutilizando os CSVs válidos em cache por sete dias).
 
 ## Outros provedores de dados
 
@@ -46,8 +59,8 @@ já exportadas no ambiente. Sem `PASSE_PROVIDERS`, o padrão é `tmdata` (dados 
   `src/data/countries.js`. Não usa cidadania para definir mercado. Somente posições
   específicas reconhecidas são aceitas. Estatísticas opcionais consultam
   `/players/{id}/stats`, limitadas à temporada, clube e competição configurados;
-  gols/assistências são convertidos por 90 minutos. Sem elas o ranking usa os
-  atributos neutros do núcleo e não representa uma avaliação técnica observada.
+  gols/assistências são convertidos por 90 minutos. Sem elas a fonte não sustenta
+  características técnicas para a busca. O detalhe tenta completar o histórico.
 - `api-football`: integração com a [API-Sports v3 oficial](https://www.api-football.com/documentation-v3),
   endpoint `/players` com chave `x-apisports-key`, catálogo de ligas e temporada.
   Busca todas as páginas dentro do limite configurado; excedê-lo produz erro
@@ -64,6 +77,15 @@ configuração válida ficam desabilitadas e não fazem chamadas. Detalhes são
 resolvidos apenas entre fontes ativas. Erros de uma fonte aparecem em
 `providerErrors`, preservando resultados das demais. IDs são únicos por fonte;
 não há fusão automática de uma pessoa entre serviços.
+
+O enriquecimento SofaScore autorizado ocorre antes do ranking e também na ficha.
+Para a nova fonte, associe explicitamente IDs como
+`PASSE_SOFASCORE_PLAYER_IDS={"tmdata-123":"456"}`. A associação de um ID
+`transfermarkt-123` não é aplicada automaticamente a `tmdata-123`. Sem associação,
+configurar apenas a URL do feed não anuncia características adicionais para tmdata.
+Transfermarkt e API-Football declaram somente as características sustentadas por
+suas estatísticas; não anunciam todo o vocabulário. Contrato do feed licenciado e
+interface do enriquecedor: [SOFASCORE_FEED.md](src/providers/SOFASCORE_FEED.md).
 
 As integrações usam cache em memória e JSON em `.cache/providers/`, TTL,
 coalescência de requisições simultâneas, timeout e fila por fonte. A fila limita

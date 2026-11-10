@@ -79,6 +79,7 @@ export function createApiFootballProvider({ env = process.env, clientFactory = c
   }
   return {
     name: 'api-football', label: 'API-Football (API-Sports v3)',
+    characteristics: ['finalizacao', 'drible', 'passesDecisivos', 'criacao', 'desarme', 'interceptacao', 'duelosNoChao', 'consistencia'],
     isEnabled: () => config().enabled,
     async searchPlayers(query = {}) {
       const c = config();

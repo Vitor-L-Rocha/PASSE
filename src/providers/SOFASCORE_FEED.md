@@ -92,6 +92,10 @@ Ou omita o segundo argumento e use
 `PASSE_SOFASCORE_PLAYER_IDS={"transfermarkt-7":"123"}`. Não existe associação
 automática por nome. Essa chamada explícita usa a autorização/configuração do
 feed; não depende de `PASSE_PROVIDERS` (que seleciona as fontes da busca).
+Para o índice CC0, configure `{"tmdata-7":"123"}` explicitamente; uma associação
+`transfermarkt-7` não é herdada por `tmdata-7`. A lista de características
+pesquisáveis só é ampliada pelo enriquecedor quando há associação de IDs para
+alguma fonte ativa; URL/autorização isoladamente não bastam.
 
 Preserva `id`, `source`, clube, liga, posição, valor, stats e demais campos da
 fonte primária. Acrescenta/substitui características e mapa de calor quando o

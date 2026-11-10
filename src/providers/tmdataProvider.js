@@ -1,48 +1,78 @@
-// Provedor de dados REAIS a partir do índice local gerado por scripts/sync-data.js
-// (projeto aberto transfermarkt-datasets, licença CC0). Não faz requisições em tempo
-// de busca: lê o arquivo .cache/tmdata/players.json, atualizado com `npm run sync-data`.
-//
-// Cobertura: ~24 mil jogadores em atividade em 31 ligas (perfil, clube, valor de mercado,
-// contrato, foto). Gols/assistências por partida existem apenas para as principais ligas
-// europeias; por isso só "finalizacao" e "criacao" podem ser derivadas desta fonte.
-
+// Índice local CC0: nenhuma requisição em tempo de busca. Os clubes e valores
+// são os do snapshot; generatedAt do índice não significa atualização da origem.
 import fs from 'node:fs';
 import path from 'node:path';
+import { tmdataDirectory } from './tmdataPaths.js';
+import { getCountry } from '../data/countries.js';
+import { getPosition } from '../data/positions.js';
+import { matchesQuery } from './normalization.js';
+import { normalizeSeasons, normalizeTitles, safeUrl } from './dashboard.js';
 
-const indexFile = () => path.resolve(process.env.PASSE_TMDATA_DIR || '.cache/tmdata', 'players.json');
-
-let loaded = null; // { file, mtimeMs, index, byId }
-
-function load() {
-  const file = indexFile();
-  let stat;
-  try { stat = fs.statSync(file); } catch { return null; }
-  if (loaded && loaded.file === file && loaded.mtimeMs === stat.mtimeMs) return loaded;
-  const index = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!Array.isArray(index?.players)) throw new Error('Índice de dados reais inválido; rode npm run sync-data.');
-  loaded = { file, mtimeMs: stat.mtimeMs, index, byId: new Map(index.players.map((p) => [p.id, p])) };
-  return loaded;
+export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {
+  let loaded;
+  function load() {
+    const file = path.join(tmdataDirectory(env.PASSE_TMDATA_DIR), 'players.json');
+    let stat;
+    try { stat = fs.statSync(file); } catch { loaded = null; return null; }
+    if (!stat.isFile()) return null;
+    const signature = `${file}|${stat.mtimeMs}|${stat.ctimeMs}|${stat.size}|${stat.ino}`;
+    if (loaded?.signature === signature) return loaded;
+    let index;
+    try { index = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { throw new Error('Índice de dados reais ilegível; rode npm run sync-data.'); }
+    if (!Array.isArray(index?.players)) throw new Error('Índice de dados reais inválido; rode npm run sync-data.');
+    const byId = new Map();
+    for (const p of index.players) {
+      if (!p || !/^tmdata-\d+$/.test(p.id) || p.source !== 'tmdata' || typeof p.name !== 'string' || !p.name.trim() ||
+          !getPosition(p.position) || !getCountry(p.leagueCountry)) continue;
+      const nonnegative = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+      // Uma linha ruim não pode tornar o índice inteiro inutilizável ou falsificar orçamento.
+      byId.set(p.id, { ...p, position: getPosition(p.position).code, leagueCountry: getCountry(p.leagueCountry).code,
+        marketValueEur: nonnegative(p.marketValueEur), age: nonnegative(p.age), heightCm: nonnegative(p.heightCm),
+        minutes: nonnegative(p.minutes), appearances: nonnegative(p.appearances),
+        stats: p.stats && typeof p.stats === 'object' && !Array.isArray(p.stats)
+          ? Object.fromEntries(Object.entries(p.stats).filter(([, value]) => nonnegative(value) != null)) : {},
+        photoUrl: safeUrl(p.photoUrl),
+        links: safeUrl(p.links?.transfermarkt) ? { transfermarkt: safeUrl(p.links.transfermarkt) } : {},
+        seasons: normalizeSeasons(p.seasons), titles: normalizeTitles(p.titles), heatmap: null,
+        characteristics: null });
+    }
+    if (index.players.length && !byId.size) throw new Error('Índice sem jogadores válidos; rode npm run sync-data.');
+    loaded = { signature, index, byId };
+    return loaded;
+  }
+  function snapshot(player) {
+    const result = structuredClone(player);
+    // A idade não deve congelar no dia da sincronização do arquivo.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(result.dateOfBirth || '')) {
+      const birth = new Date(`${result.dateOfBirth}T00:00:00Z`);
+      const today = now();
+      let age = today.getUTCFullYear() - birth.getUTCFullYear();
+      if (today.getUTCMonth() < birth.getUTCMonth() ||
+          (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
+      result.age = Number.isFinite(birth.getTime()) && birth.toISOString().slice(0, 10) === result.dateOfBirth && age >= 0 && age <= 100 ? age : null;
+    }
+    return result;
+  }
+  return {
+    name: 'tmdata', label: 'transfermarkt-datasets (dados abertos, CC0)',
+    characteristics: ['finalizacao', 'criacao'],
+    isEnabled() { try { return Boolean(load()?.byId.size); } catch { return false; } },
+    info() {
+      const l = load();
+      return l ? { ...l.index.source, generatedAt: l.index.generatedAt, players: l.byId.size } : null;
+    },
+    async searchPlayers(query = {}) {
+      const l = load();
+      if (!l) throw new Error('Dados reais ainda não sincronizados. Rode: npm run sync-data');
+      return [...l.byId.values()].filter((p) => matchesQuery(p, query)).map(snapshot);
+    },
+    async getPlayer(id) {
+      if (!/^tmdata-\d+$/.test(String(id))) return null;
+      const player = load()?.byId.get(String(id));
+      return player ? snapshot(player) : null;
+    },
+  };
 }
 
-export const tmdataProvider = {
-  name: 'tmdata',
-  label: 'transfermarkt-datasets (dados abertos, CC0)',
-  // Características que as estatísticas desta fonte conseguem sustentar.
-  characteristics: ['finalizacao', 'criacao'],
-  isEnabled: () => fs.existsSync(indexFile()),
-  info() {
-    const l = load();
-    return l ? { ...l.index.source, generatedAt: l.index.generatedAt, players: l.index.players.length } : null;
-  },
-  async searchPlayers({ position, maxBudgetEur } = {}) {
-    const l = load();
-    if (!l) throw new Error('Dados reais ainda não sincronizados. Rode: npm run sync-data');
-    const pos = position ? String(position).toUpperCase() : null;
-    return l.index.players.filter(
-      (p) => (!pos || p.position === pos) && (maxBudgetEur == null || (p.marketValueEur != null && p.marketValueEur <= maxBudgetEur))
-    );
-  },
-  async getPlayer(id) {
-    return load()?.byId.get(id) || null;
-  },
-};
+export const tmdataProvider = createTmdataProvider();
