@@ -18,24 +18,38 @@
 // e devem respeitar os termos de uso de cada plataforma.
 
 import { demoProvider } from './demoProvider.js';
+import { transfermarktProvider } from './transfermarktProvider.js';
+import { apiFootballProvider } from './apiFootballProvider.js';
 
-const REGISTRY = new Map([[demoProvider.name, demoProvider]]);
+const REGISTRY = new Map();
 
 export function registerProvider(provider) {
+  if (!provider || typeof provider.name !== 'string' || !provider.name ||
+      !['isEnabled', 'searchPlayers', 'getPlayer'].every((key) => typeof provider[key] === 'function')) {
+    throw new TypeError('Contrato de provedor inválido');
+  }
   REGISTRY.set(provider.name, provider);
 }
+
+for (const provider of [demoProvider, transfermarktProvider, apiFootballProvider]) registerProvider(provider);
 
 export function activeProviders() {
   const names = (process.env.PASSE_PROVIDERS || 'demo')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  return names.map((n) => REGISTRY.get(n)).filter((p) => p && p.isEnabled());
+  return [...new Set(names)].map((n) => REGISTRY.get(n)).filter((p) => {
+    try { return p && p.isEnabled(); } catch { return false; }
+  });
 }
 
 export async function searchAll(query) {
   const providers = activeProviders();
-  const settled = await Promise.allSettled(providers.map((p) => p.searchPlayers(query)));
+  const settled = await Promise.allSettled(providers.map(async (p) => {
+    const players = await p.searchPlayers(query);
+    if (!Array.isArray(players)) throw new TypeError('Provedor retornou lista inválida');
+    return players;
+  }));
   const players = [];
   const errors = [];
   settled.forEach((r, i) => {
@@ -46,8 +60,9 @@ export async function searchAll(query) {
 }
 
 export async function getPlayerById(id) {
-  const source = String(id).split('-')[0];
-  const provider = REGISTRY.get(source);
+  // Nomes de fontes podem conter hífen (ex.: api-football).
+  const provider = activeProviders().sort((a, b) => b.name.length - a.name.length)
+    .find((p) => String(id).startsWith(`${p.name}-`));
   if (!provider) return null;
   return provider.getPlayer(id);
 }
