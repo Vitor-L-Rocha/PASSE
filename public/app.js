@@ -122,7 +122,8 @@ function renderResults() {
 
   const warns = [];
   if (d.providers.length === 1 && d.providers[0] === 'demo') warns.push('Usando dados de demonstração (jogadores fictícios). Configure provedores reais para resultados de mercado.');
-  for (const pe of d.providerErrors || []) warns.push(`Fonte "${pe.provider}" indisponível: ${pe.message}`);
+  warns.push(...(d.criteria.warnings || []));
+  for (const pe of d.providerErrors || [])warns.push(`Fonte "${pe.provider}" indisponível: ${pe.message}`);
   if (d.criteria.text && !d.criteria.traits.length && !Object.keys(f).length) warns.push('Nenhuma característica reconhecida no texto; o ranking usa o perfil padrão da posição.');
 
   el.innerHTML = `

@@ -12,7 +12,14 @@ test('parseCriteria reconhece características, pé, idade e altura', () => {
   assert.ok(c.traits.includes('Jogo aéreo'));
   assert.equal(c.filters.foot, 'esquerdo');
   assert.equal(c.filters.maxAge, 21);
-  assert.equal(c.filters.minHeightCm, 185);
+  assert.equal(c.filters.minHeightCm, 186); // "acima de" é estrito
+});
+
+test('parseCriteria: pés conflitantes não filtram e geram aviso', () => {
+  const c = parseCriteria('canhoto destro');
+  assert.equal(c.filters.foot, undefined);
+  assert.equal(c.warnings.length, 1);
+  assert.equal(parseCriteria('ambidestro').filters.foot, 'ambidestro');
 });
 
 test('parseCriteria: "jovem" vira idade máxima 23 e texto vazio não gera filtros', () => {

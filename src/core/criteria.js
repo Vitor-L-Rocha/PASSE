@@ -40,18 +40,24 @@ export function parseCriteria(text) {
     }
   }
 
-  // Pé preferencial
-  if (/\b(canhot[oa]|pe esquerdo|perna esquerda|left-?footed|zurdo)\b/.test(t)) filters.foot = 'esquerdo';
-  else if (/\b(destr[oa]|pe direito|perna direita|right-?footed|diestro)\b/.test(t)) filters.foot = 'direito';
-  else if (/\b(ambidestr[oa]|dois pes|ambos os pes)\b/.test(t)) filters.foot = 'ambidestro';
+  // Pé preferencial. Se o texto pedir pés diferentes (ex.: "canhoto destro"),
+  // não filtra por pé e devolve um aviso, em vez de escolher um silenciosamente.
+  const warnings = [];
+  const feet = [
+    [/\b(ambidestr[oa]|dois pes|ambos os pes)\b/, 'ambidestro'],
+    [/\b(canhot[oa]|pe esquerdo|perna esquerda|left-?footed|zurdo)\b/, 'esquerdo'],
+    [/\b(destr[oa]|pe direito|perna direita|right-?footed|diestro)\b/, 'direito'],
+  ].filter(([re]) => re.test(t)).map(([, foot]) => foot);
+  if (feet.length === 1) filters.foot = feet[0];
+  else if (feet.length > 1) warnings.push(`Pés conflitantes no texto (${feet.join(', ')}); o filtro de pé foi ignorado.`);
 
   // Idade
   const sub = t.match(/\bsub ?-?(\d{2})\b/);
   const ateIdade = t.match(/\b(?:ate|maximo|max|no maximo|menos de) (\d{2}) anos\b/);
   const minIdade = t.match(/\b(?:acima de|mais de|minimo|pelo menos) (\d{2}) anos\b/);
   if (sub) filters.maxAge = Number(sub[1]); // sub-23 => até 23 anos
-  if (ateIdade) filters.maxAge = Number(ateIdade[1]);
-  if (minIdade) filters.minAge = Number(minIdade[1]);
+  if (ateIdade) filters.maxAge = Number(ateIdade[1]) - (ateIdade[0].startsWith('menos de') ? 1 : 0);
+  if (minIdade) filters.minAge = Number(minIdade[1]) + (/^(acima de|mais de)/.test(minIdade[0]) ? 1 : 0);
   if (!filters.maxAge && /\b(jovem|jovens|promessa|revelacao|young|garoto)\b/.test(t)) {
     filters.maxAge = 23;
     traits.push('Jovem');
@@ -59,11 +65,11 @@ export function parseCriteria(text) {
   if (!filters.minAge && /\b(experiente|veterano|rodado|lider)\b/.test(t)) filters.minAge = 27;
 
   // Altura
-  const alt = t.match(/\b(?:acima de|mais de|minimo|pelo menos) (1[ ,.]?\d{2}|\d{3}) ?(?:m|cm)?\b/);
+  const alt = t.match(/\b(?:acima de|mais de|minimo|pelo menos) (1 ?\d{2}|\d{3}) ?(?:m|cm)?\b/);
   if (alt) {
     const n = Number(alt[1].replace(/[ ,.]/g, ''));
-    filters.minHeightCm = n < 100 ? n * 100 : n;
+    filters.minHeightCm = n + (/^(acima de|mais de)/.test(alt[0]) ? 1 : 0);
   }
 
-  return { text: String(text || ''), traits, weights, filters };
+  return { text: String(text || ''), traits, weights, filters, warnings };
 }

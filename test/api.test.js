@@ -82,7 +82,10 @@ test('busca respeita liga, continente, orçamento e ranking; detalhe corresponde
   assert.equal((await fetch(`${base}/api/players/demo-999999`)).status, 404);
 });
 
-test('características conflitantes não devem ser silenciosamente ignoradas', { todo: 'definir política para canhoto e destro simultâneos' }, async () => {
-  const { status } = await search({ characteristics: 'canhoto destro' });
-  assert.equal(status, 400);
+// Política: pés conflitantes não bloqueiam a busca; o filtro de pé é ignorado e a API devolve um aviso.
+test('características conflitantes não são silenciosamente ignoradas', async () => {
+  const { status, data } = await search({ characteristics: 'canhoto destro' });
+  assert.equal(status, 200);
+  assert.equal(data.criteria.filters.foot, undefined);
+  assert.ok(data.criteria.warnings.some((w) => /conflitantes/.test(w)));
 });
