@@ -55,13 +55,37 @@ simuladas, sem chaves nem acesso às plataformas externas.
 
 ## Como funciona
 
-1. O usuário escolhe o **país do seu clube**, o **teto orçamentário** (valor de mercado máximo, em €), a **posição** e escreve as **características** desejadas em texto livre (ex.: "ponta rápido, canhoto, driblador, até 23 anos").
-2. O PASSE consulta os provedores de dados ativos, filtra por posição, orçamento e filtros objetivos (pé, idade, altura) e calcula um índice de **aderência ao perfil** (0–100). Ele mede o encaixe no perfil pedido, não a qualidade geral do jogador.
-3. Os resultados são separados em três mercados, sempre pelo **país da liga onde o atleta joga** (não pela nacionalidade):
-   - **Interno**: mesmo país do clube
-   - **Externo**: outro país do mesmo continente
-   - **Internacional**: demais continentes
-4. Ao clicar em um jogador, abre um **dashboard** com dados de mercado e contrato, radar de atributos e estatísticas da temporada.
+O PASSE **não dá notas de competência** aos jogadores. Cada atleta é descrito por
+**características** (pontos fortes e pontos fracos, no estilo do SofaScore), e o
+relatório cruza essas características com o que o clube procura.
+
+1. **Início**: o usuário informa a **posição**, o **lugar** (país do seu clube), o
+   **valor esperado** (teto de valor de mercado, em €) e seleciona/descreve as
+   **características** desejadas. Pé, idade e altura escritos no texto viram filtros.
+2. **Relatório**: o PASSE consulta as fontes ativas, aplica posição, orçamento e
+   filtros, e ordena por encaixe: quantas características pedidas são pontos fortes
+   do jogador, quantas são pontos fracos e, no empate, o menor valor. Não é um
+   ranking de "melhores". Os jogadores ficam em três abas, sempre pelo **país da
+   liga onde o atleta joga** (não pela nacionalidade):
+   - **Nacional**: mesmo país do clube
+   - **Continental**: outro país do mesmo continente
+   - **Global**: demais continentes
+3. **Jogador**: foto, nome, idade, time, posição e pé; **mapa de calor**; **time e
+   estatística por temporada**; **títulos**; e **características**.
+
+As características vêm da fonte quando ela fornece (feed autorizado do SofaScore).
+Caso contrário, são derivadas das estatísticas por 90 minutos, comparadas a
+jogadores da mesma função; a ficha indica qual foi o caso. A nota média exibida nas
+temporadas é a da fonte, nunca calculada pelo PASSE.
+
+### Enriquecimento SofaScore
+
+Jogadores de outras fontes (Transfermarkt, API-Football) podem receber
+características e mapa de calor do feed SofaScore autorizado associando IDs em
+`PASSE_SOFASCORE_PLAYER_IDS` (ex.: `{"transfermarkt-7":"123"}`). O enriquecimento
+acontece antes do ranking, então o relatório e a ficha usam as mesmas
+características. Sem configuração, nada é consultado. Contrato do feed:
+`src/providers/SOFASCORE_FEED.md`.
 
 ## Rodando
 
@@ -76,23 +100,25 @@ npm test
 ```
 src/
   server.js              API Express + arquivos estáticos
-  core/criteria.js       texto livre -> pesos de atributos + filtros
-  core/attributes.js     estatísticas /90 -> atributos 0–100
-  core/matcher.js        índice de aderência e ranking
-  core/markets.js        classificação interno / externo / internacional
+  core/criteria.js       seleção + texto livre -> características desejadas + filtros
+  core/characteristics.js características da fonte ou derivadas das estatísticas
+  core/attributes.js     apoio interno à derivação (não exposto ao usuário)
+  core/matcher.js        ranking por encaixe de características
+  core/markets.js        classificação nacional / continental / global
+  data/characteristics.js vocabulário de características
   data/countries.js      países e continentes
   data/positions.js      posições e perfil base de cada uma
   data/demoDataset.js    jogadores FICTÍCIOS para desenvolvimento
   providers/             fontes de dados plugáveis (contrato em providers/index.js)
-public/                  frontend (HTML/CSS/JS, sem build)
+public/                  frontend em 3 telas (#/, #/relatorio, #/jogador/:id), sem build
 test/                    testes (node:test)
 ```
 
 ### API
 
-- `GET /api/meta`: países, posições, atributos e mercados
-- `POST /api/search` com `{ country, maxBudgetEur, position, characteristics }`
-- `GET /api/players/:id`: detalhe para o dashboard
+- `GET /api/meta`: países, posições, vocabulário de características e mercados
+- `POST /api/search` com `{ country, maxBudgetEur, position, selectedCharacteristics: [códigos], characteristics: "texto livre" }`
+- `GET /api/players/:id`: ficha completa (temporadas, títulos, mapa de calor, características)
 
 ### Fontes de dados
 

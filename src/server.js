@@ -9,6 +9,11 @@ import { parseCriteria } from './core/criteria.js';
 import { rankPlayers } from './core/matcher.js';
 import { characteristicsOf } from './core/characteristics.js';
 import { searchAll, getPlayerById } from './providers/index.js';
+import { enrichPlayerWithSofascore } from './providers/sofascoreProvider.js';
+
+// Acrescenta características/mapa de calor do feed autorizado do SofaScore a jogadores
+// de outras fontes que tenham ID SofaScore configurado. Sem config ou em erro, devolve o original.
+const enrich = (p) => (p?.source === 'sofascore' ? p : enrichPlayerWithSofascore(p));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_RESULTS_PER_MARKET = 25;
@@ -44,7 +49,10 @@ export function createApp() {
 
     try {
       const criteria = parseCriteria(characteristics, selectedCharacteristics);
-      const { players, errors: providerErrors, providers } = await searchAll({ position, maxBudgetEur: budget });
+      const found = await searchAll({ position, maxBudgetEur: budget });
+      const { errors: providerErrors, providers } = found;
+      // Enriquecer ANTES do ranking: o relatório e a ficha usam as mesmas características.
+      const players = await Promise.all(found.players.map(enrich));
       const ranking = rankPlayers(players, { country, maxBudgetEur: budget, position, criteria });
       for (const k of Object.keys(ranking.markets)) {
         ranking.markets[k] = ranking.markets[k].slice(0, MAX_RESULTS_PER_MARKET).map(summary);
@@ -58,7 +66,7 @@ export function createApp() {
 
   app.get('/api/players/:id', async (req, res) => {
     try {
-      const player = await getPlayerById(req.params.id);
+      const player = await enrich(await getPlayerById(req.params.id));
       if (!player) return res.status(404).json({ errors: ['Jogador não encontrado.'] });
       res.json({ ...player, characteristics: characteristicsOf(player) });
     } catch (err) {
