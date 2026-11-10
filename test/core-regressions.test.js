@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveAttributes } from '../src/core/attributes.js';
 import { parseCriteria } from '../src/core/criteria.js';
-import { rankPlayers, scorePlayer } from '../src/core/matcher.js';
+import { rankPlayers, matchPlayer } from '../src/core/matcher.js';
+import { characteristicsOf } from '../src/core/characteristics.js';
 import { classifyMarket } from '../src/core/markets.js';
 
 test('atributos ignoram null, strings, NaN e infinitos sem contaminar o ranking', () => {
@@ -52,10 +53,22 @@ test('critérios opcionais, posição case insensitive e país da liga', () => {
   assert.equal(rankPlayers([player]).total, 1);
 });
 
-test('pesos, atributos e minutagem inválidos não produzem NaN/fit negativo', () => {
-  const result = scorePlayer({ ...player, minutes: -999999, attributes: { defesa: NaN, passe: 100 } },
-    { defesa: 3, passe: 1, fisico: -1, velocidade: Infinity });
-  assert.equal(result.fit, 85);
-  assert.equal(result.strengths.length, 0);
-  assert.ok(Number.isFinite(scorePlayer({ ...player, stats: { rating: NaN } }, { _rating: 1 }).fit));
+test('características: fonte tem prioridade, códigos desconhecidos são descartados e stats inválidas não geram pontos', () => {
+  const fromSource = characteristicsOf({ ...player, characteristics: { positive: ['desarme', 'xyz'], negative: ['passe'] } });
+  assert.deepEqual(fromSource, { positive: ['desarme'], negative: ['passe'], source: 'fonte' });
+  const derived = characteristicsOf({ ...player, stats: { tackles: NaN, interceptions: Infinity, rating: 'x' } });
+  assert.equal(derived.source, 'estatisticas');
+  assert.deepEqual(derived.positive, []);
+  const m = matchPlayer({ ...player, characteristics: { positive: ['desarme', 'cabeceio'], negative: ['passe'] } }, ['cabeceio', 'passe', 'velocidade']);
+  assert.deepEqual(m.matched, ['cabeceio']);
+  assert.deepEqual(m.weakIn, ['passe']);
+});
+
+test('ranking por características: exige ao menos uma pedida e ordena por quantidade atendida', () => {
+  const a = { ...player, id: 'a', characteristics: { positive: ['desarme'], negative: [] } };
+  const b = { ...player, id: 'b', characteristics: { positive: ['desarme', 'cabeceio'], negative: [] } };
+  const c = { ...player, id: 'c', characteristics: { positive: ['passe'], negative: [] } };
+  const r = rankPlayers([a, b, c], { country: 'PT', criteria: { characteristics: ['desarme', 'cabeceio'] } });
+  assert.deepEqual(r.markets.interno.map((p) => p.id), ['b', 'a']);
+  assert.equal(r.usingPositionProfile, false);
 });

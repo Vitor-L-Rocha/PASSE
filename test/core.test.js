@@ -9,7 +9,8 @@ import { createApp } from '../src/server.js';
 test('parseCriteria reconhece características, pé, idade e altura', () => {
   const c = parseCriteria('Rápido, canhoto, bom no jogo aéreo, sub-21, acima de 1,85');
   assert.ok(c.traits.includes('Velocidade'));
-  assert.ok(c.traits.includes('Jogo aéreo'));
+  assert.ok(c.traits.includes('Duelos aéreos'));
+  assert.deepEqual(c.characteristics, ['duelosAereos', 'velocidade']);
   assert.equal(c.filters.foot, 'esquerdo');
   assert.equal(c.filters.maxAge, 21);
   assert.equal(c.filters.minHeightCm, 186); // "acima de" é estrito
@@ -47,7 +48,8 @@ test('rankPlayers respeita orçamento, posição e filtros, e ordena por aderên
     assert.ok(['esquerdo', 'ambidestro'].includes(p.foot));
   }
   for (const list of Object.values(r.markets)) {
-    for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].fit >= list[i].fit);
+    for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].match.matched.length >= list[i].match.matched.length);
+    for (const p of list) assert.equal(p.fit, undefined);
   }
   for (const p of r.markets.interno) assert.equal(p.leagueCountry, 'BR');
 });
@@ -72,7 +74,7 @@ test('API: busca e detalhe do jogador', async () => {
     assert.equal(det.status, 200);
     const p = await det.json();
     assert.equal(p.id, first.id);
-    assert.ok(p.attributes && p.stats);
+    assert.ok(p.characteristics && p.stats);
 
     assert.equal((await fetch(`${base}/api/players/demo-999999`)).status, 404);
   } finally {

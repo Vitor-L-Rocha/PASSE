@@ -1,9 +1,9 @@
 import { continentOf } from '../data/countries.js';
 
 export const MARKETS = {
-  interno: 'Mercado interno',
-  externo: 'Mercado externo',
-  internacional: 'Mercado internacional',
+  interno: 'Nacional',
+  externo: 'Continental',
+  internacional: 'Global',
 };
 
 // Classifica pelo país da LIGA em que o jogador atua (não pela nacionalidade).

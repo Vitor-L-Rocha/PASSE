@@ -3,63 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PASSE · Scouting</title>
+  <title>PASSE</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">PASSE</span>
-      <span class="tagline">Plataforma de Auxílio ao Scouting para Sociedades Esportivas</span>
-    </div>
-    <span id="providers" class="providers"></span>
-  </header>
-
-  <main class="layout">
-    <form id="search" class="panel search" novalidate>
-      <h2>Briefing de contratação</h2>
-
-      <label class="field">
-        <span><b>1</b> País do seu clube</span>
-        <select name="country" required></select>
-      </label>
-
-      <label class="field">
-        <span><b>2</b> Teto orçamentário (€)</span>
-        <input name="maxBudgetEur" type="text" inputmode="numeric" placeholder="ex.: 2.000.000" required />
-        <small class="hint" id="budgetHint">Valor de mercado máximo do atleta</small>
-      </label>
-
-      <label class="field">
-        <span><b>3</b> Posição</span>
-        <select name="position" required></select>
-      </label>
-
-      <label class="field">
-        <span><b>4</b> Características desejadas</span>
-        <textarea name="characteristics" rows="4" maxlength="1000"
-          placeholder="ex.: ponta rápido, canhoto, bom no drible, jovem até 23 anos"></textarea>
-        <div class="chips" id="suggestions"></div>
-      </label>
-
-      <button type="submit" class="primary">Buscar jogadores</button>
-      <p class="error" id="formError" role="alert"></p>
-    </form>
-
-    <section class="results" id="results" aria-live="polite">
-      <div class="empty">
-        <h3>Defina o perfil e encontre quem se encaixa</h3>
-        <p>O PASSE consulta as fontes de dados, filtra pelo orçamento e posição e monta um ranking de
-          <em>aderência ao perfil</em>, separado por mercado: interno (mesmo país), externo (mesmo continente) e internacional.</p>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="dashboard" class="dashboard"></dialog>
-
-  <footer class="foot">Mercado é definido pelo país da liga em que o atleta joga, não pela nacionalidade.</footer>
+  <main id="app" aria-live="polite"></main>
   <script type="module" src="app.js"></script>
 </body>
 </html>

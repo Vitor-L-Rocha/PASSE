@@ -28,7 +28,9 @@ test('meta descreve países, posições e mercados', async () => {
   assert.ok(meta.countries.some((c) => c.code === 'BR' && c.continent === 'SA'));
   assert.ok(meta.positions.some((p) => p.code === 'ST'));
   assert.deepEqual(Object.keys(meta.markets), ['interno', 'externo', 'internacional']);
-  assert.ok(meta.attributes && meta.continents);
+  assert.ok(meta.continents);
+  assert.ok(meta.characteristics.some((c) => c.code === 'finalizacao' && c.label));
+  assert.equal(meta.attributes, undefined, 'o PASSE não expõe notas de atributos');
 });
 
 test('valida orçamento, país, posição e limite do texto', async () => {
@@ -60,8 +62,9 @@ test('busca respeita liga, continente, orçamento e ranking; detalhe corresponde
         count++;
         assert.equal(player.position, query.position);
         assert.ok(player.marketValueEur <= query.maxBudgetEur);
-        assert.ok(player.fit >= 0 && player.fit <= 100);
-        if (i) assert.ok(players[i - 1].fit >= player.fit);
+        assert.equal(player.fit, undefined, 'sem nota de competência');
+        assert.ok(player.match.matched.length >= 1 && player.match.matched.every((c) => player.characteristics.positive.includes(c)));
+        if (i) assert.ok(players[i - 1].match.matched.length >= player.match.matched.length);
         assert.ok(continents.has(player.leagueCountry));
         const expected = player.leagueCountry === country ? 'interno'
           : continents.get(player.leagueCountry) === continents.get(country) ? 'externo' : 'internacional';
@@ -76,7 +79,9 @@ test('busca respeita liga, continente, orçamento e ranking; detalhe corresponde
     const detail = await response.json();
     assert.equal(detail.id, first.id);
     assert.equal(detail.leagueCountry, first.leagueCountry);
-    assert.ok(detail.attributes && detail.stats);
+    assert.ok(detail.characteristics && Array.isArray(detail.characteristics.positive));
+    assert.ok(Array.isArray(detail.seasons) && Array.isArray(detail.titles) && detail.heatmap.points.length > 0);
+    assert.equal(detail.attributes, undefined);
   }
   assert.ok(count > 0 && differentNationality, 'fixture deve incluir nacionalidade diferente da liga');
   assert.equal((await fetch(`${base}/api/players/demo-999999`)).status, 404);

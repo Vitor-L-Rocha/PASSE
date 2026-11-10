@@ -107,6 +107,59 @@ function makeStats(rand, pos, q, heightCm) {
   return stats;
 }
 
+// Zona média de atuação por posição (x: 0 = própria meta, 100 = meta adversária; y: 0-100 largura).
+const ZONES = {
+  GK: [6, 50, 4, 10], CB: [26, 50, 9, 14], LB: [45, 14, 18, 8], RB: [45, 86, 18, 8], DM: [40, 50, 12, 16],
+  CM: [52, 50, 15, 18], AM: [68, 50, 12, 18], LW: [74, 16, 14, 10], RW: [74, 84, 14, 10], ST: [84, 50, 9, 14],
+};
+
+function makeHeatmap(rand, pos) {
+  const [cx, cy, sx, sy] = ZONES[pos];
+  const points = [];
+  for (let i = 0; i < 90; i++) {
+    const x = Math.round(Math.max(1, Math.min(99, cx + gauss(rand) * sx)));
+    const y = Math.round(Math.max(1, Math.min(99, cy + gauss(rand) * sy)));
+    points.push({ x, y, count: 1 + Math.floor(rand() * 3) });
+  }
+  return { season: '2026', competition: 'Liga (demo)', points };
+}
+
+function makeSeasons(rand, base) {
+  const seasons = [];
+  let club = base.club;
+  let league = base.league;
+  for (let k = 0; k < 3; k++) {
+    const season = String(2026 - k);
+    if (k > 0 && rand() < 0.35) {
+      club = `${pick(rand, CLUB_PREFIX)} ${cityName(rand)}`;
+    }
+    const minutes = k === 0 ? base.minutes : Math.round(base.minutes * (0.5 + rand() * 0.8));
+    const per = (v) => Math.round(((v || 0) * minutes) / 90);
+    seasons.push({
+      season,
+      club,
+      league,
+      appearances: k === 0 ? base.appearances : Math.max(3, Math.round(minutes / 80)),
+      minutes,
+      goals: per(base.stats.goals * (0.8 + rand() * 0.4)),
+      assists: per(base.stats.assists * (0.8 + rand() * 0.4)),
+      rating: Math.round((base.stats.rating + (k === 0 ? 0 : (rand() - 0.5) * 0.5)) * 100) / 100,
+    });
+  }
+  return seasons;
+}
+
+function makeTitles(rand, base, countryName) {
+  const pool = [`Campeonato ${countryName} (demo)`, `Copa ${countryName} (demo)`, `Supercopa ${countryName} (demo)`, 'Copa Continental (demo)'];
+  const n = rand() < 0.45 ? 0 : 1 + Math.floor(rand() * 3);
+  const titles = [];
+  for (let i = 0; i < n; i++) {
+    const s = base.seasons[Math.floor(rand() * base.seasons.length)];
+    titles.push({ name: pick(rand, pool), season: s.season, club: s.club });
+  }
+  return titles.sort((a, b) => b.season.localeCompare(a.season));
+}
+
 let cache = null;
 
 export function generateDemoPlayers({ perCountry = 60, seed = 20261110 } = {}) {
@@ -152,7 +205,16 @@ export function generateDemoPlayers({ perCountry = 60, seed = 20261110 } = {}) {
         minutes: matches * (60 + Math.floor(rand() * 30)),
         stats: makeStats(rand, pos, q, heightCm),
         links: {},
+        photoUrl: null,
       });
+      // Dados extras com gerador próprio, para não alterar a sequência dos dados acima.
+      const p = players[players.length - 1];
+      const extra = mulberry32(seed + id * 7919);
+      const wide = ['LB', 'RB', 'LW', 'RW'].includes(pos.code);
+      p.stats.accurateCrosses = pos.code === 'GK' ? 0 : r2(Math.max(0, (wide ? 1.1 : 0.25) + (q - 0.5) * 1.2 + gauss(extra) * 0.3));
+      p.heatmap = makeHeatmap(extra, pos.code);
+      p.seasons = makeSeasons(extra, p);
+      p.titles = makeTitles(extra, p, country.name);
     }
   }
   cache = { seed, perCountry, players };
