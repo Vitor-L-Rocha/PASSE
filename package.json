@@ -1,0 +1,32 @@
+{
+  "name": "passe",
+  "version": "1.0.0",
+  "description": "PASSE - Plataforma de Auxílio ao Scouting para Sociedades Esportivas",
+  "main": "src/server.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vitor-L-Rocha/PASSE.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Vitor-L-Rocha/PASSE/issues"
+  },
+  "homepage": "https://github.com/Vitor-L-Rocha/PASSE#readme",
+  "dependencies": {
+    "express": "^4.22.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
