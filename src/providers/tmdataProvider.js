@@ -2,7 +2,7 @@
 // são os do snapshot; generatedAt do índice não significa atualização da origem.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tmdataDirectory, apiFootballDirectory, goalApiDirectory } from './tmdataPaths.js';
+import { tmdataDirectory, apiFootballDirectory, goalApiDirectory, reepDirectory } from './tmdataPaths.js';
 import { getCountry } from '../data/countries.js';
 import { getPosition } from '../data/positions.js';
 import { matchesQuery } from './normalization.js';
@@ -44,6 +44,26 @@ function applyRecent(p, r, nonnegative) {
   p.recent = { source: r.source || 'API-Football', season: r.season, current, perGame: Boolean(r.perGame), fetchedAt: r.fetchedAt || null };
 }
 
+const slug = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'jogador';
+
+// Links para o perfil do jogador em cada plataforma (IDs vindos do Reep, CC0).
+// O PASSE só aponta para as páginas; quem abre é o scout.
+export function profileLinks(name, ids = {}) {
+  const ok = (v, re) => (typeof v === 'string' && re.test(v) ? v : null);
+  const links = {};
+  const sofascore = ok(ids.sofascore, /^\d+$/);
+  const fotmob = ok(ids.fotmob, /^\d+$/);
+  const fbref = ok(ids.fbref, /^[0-9a-f]{8}$/);
+  const whoscored = ok(ids.whoscored, /^\d+$/);
+  const understat = ok(ids.understat, /^\d+$/);
+  if (sofascore) links.sofascore = `https://www.sofascore.com/football/player/${slug(name)}/${sofascore}`;
+  if (fotmob) links.fotmob = `https://www.fotmob.com/players/${fotmob}/${slug(name)}`;
+  if (fbref) links.fbref = `https://fbref.com/en/players/${fbref}/`;
+  if (whoscored) links.whoscored = `https://www.whoscored.com/Players/${whoscored}`;
+  if (understat) links.understat = `https://understat.com/player/${understat}`;
+  return links;
+}
+
 export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {
   let loaded;
   function load() {
@@ -57,10 +77,13 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
       path.join(apiFootballDirectory(env.PASSE_API_FOOTBALL_DIR), 'enrichment.json'),
       path.join(goalApiDirectory(env.PASSE_GOAL_API_DIR), 'enrichment.json'),
     ];
+    const idsFile = path.join(reepDirectory(env.PASSE_REEP_DIR), 'ids.json');
+    enrichFiles.push(idsFile);
     const enrichStats = enrichFiles.map((f) => { try { return fs.statSync(f); } catch { return null; } });
     const signature = `${file}|${stat.mtimeMs}|${stat.ctimeMs}|${stat.size}|${stat.ino}|${enrichStats.map((x) => `${x?.mtimeMs ?? '-'}:${x?.size ?? '-'}`).join('|')}`;
     if (loaded?.signature === signature) return loaded;
-    const recentSets = enrichFiles.map((f, i) => {
+    const reepIds = (() => { try { return JSON.parse(fs.readFileSync(idsFile, 'utf8')).players || {}; } catch { return {}; } })();
+    const recentSets = enrichFiles.slice(0, 2).map((f, i) => {
       if (!enrichStats[i]) return {};
       try { return JSON.parse(fs.readFileSync(f, 'utf8')).players || {}; } catch { return {}; }
     });
@@ -83,7 +106,14 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
         links: safeUrl(p.links?.transfermarkt) ? { transfermarkt: safeUrl(p.links.transfermarkt) } : {},
         seasons: normalizeSeasons(p.seasons), titles: null, heatmap: null, // fonte não informa títulos nem mapa de calor
         characteristics: null });
-      for (const set of recentSets) if (set[p.id]) applyRecent(byId.get(p.id), set[p.id], nonnegative);
+      const entry = byId.get(p.id);
+      for (const set of recentSets) if (set[p.id]) applyRecent(entry, set[p.id], nonnegative);
+      const ids = reepIds[p.id];
+      if (ids) {
+        entry.links = { ...entry.links, ...profileLinks(entry.name, ids) };
+        // ID oficial da API-Football: libera os títulos mesmo para quem não foi sincronizado.
+        if (!Number.isInteger(entry.apiFootballId) && /^\d+$/.test(ids.apiFootball || '')) entry.apiFootballId = Number(ids.apiFootball);
+      }
     }
     if (index.players.length && !byId.size) throw new Error('Índice sem jogadores válidos; rode npm run sync-data.');
     const recentCount = [...byId.values()].filter((p) => p.recent).length;

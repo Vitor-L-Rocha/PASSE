@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmdataDirectory, apiFootballDirectory } from '../src/providers/tmdataPaths.js';
+import { tmdataDirectory, apiFootballDirectory, reepDirectory } from '../src/providers/tmdataPaths.js';
 import { createClient, ApiError } from '../src/providers/apiFootballClient.js';
 
 export { createClient, ApiError };
@@ -127,7 +127,18 @@ export function rebuildEnrichment({ log = console.log } = {}) {
   const indexFile = path.join(tmdataDirectory(), 'players.json');
   const index = readJson(indexFile, null);
   if (!index?.players) throw new Error('Índice de dados reais não encontrado; rode npm run sync-data antes.');
-  const match = buildMatcher(index.players);
+  const byName = buildMatcher(index.players);
+  // Preferência: ID oficial ligado pelo Reep (npm run sync-reep); reserva: nascimento + nome.
+  const reep = readJson(path.join(reepDirectory(), 'ids.json'), { players: {} }).players || {};
+  const tmByApiId = new Map();
+  for (const [tmId, ids] of Object.entries(reep)) if (ids.apiFootball) tmByApiId.set(String(ids.apiFootball), tmId);
+  const tmById = new Map(index.players.map((p) => [p.id, p]));
+  let byReep = 0;
+  const match = (ap) => {
+    const viaReep = tmById.get(tmByApiId.get(String(ap.id)));
+    if (viaReep) { byReep++; return viaReep; }
+    return byName(ap);
+  };
   const leagueNames = new Map((index.leagues || []).map((l) => [l.id, l]));
   const state = readJson(path.join(dir, 'state.json'), { leagues: {} });
   const out = {};
@@ -152,7 +163,7 @@ export function rebuildEnrichment({ log = console.log } = {}) {
     }
   }
   writeJson(path.join(dir, 'enrichment.json'), { generatedAt: new Date().toISOString(), source: 'API-Football (API-Sports v3)', players: out });
-  log(`  casamento: ${matched} de ${total} jogadores da API-Football ligados ao índice (${Object.keys(out).length} atualizados)`);
+  log(`  casamento: ${matched} de ${total} jogadores da API-Football ligados ao índice (${byReep} pelo ID oficial do Reep; ${Object.keys(out).length} atualizados)`);
   return out;
 }
 

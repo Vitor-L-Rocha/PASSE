@@ -97,6 +97,29 @@ Ordem de prioridade: GOAL API (temporada atual) > API-Football (no plano grátis
 - No máximo 3 páginas por consulta: a sincronização busca time por time.
 - Limite por minuto: as consultas são espaçadas (6,5 s) e repetidas uma vez se estourar.
 
+## IDs entre plataformas e links (Reep)
+
+`npm run sync-reep` usa o [Reep](https://reep.football) (registro aberto de identidades do
+futebol, **CC0**; baixa ~180 MB na primeira vez) para ligar o ID do Transfermarkt de cada
+jogador aos IDs dele em outras plataformas. Em nov/2026: 24.021 dos 24.263 jogadores do
+índice encontrados; API-Football 19.333, FotMob 23.390, WhoScored 19.166, SofaScore 10.810,
+FBref 7.322, Understat 3.755.
+
+Com isso:
+- a ligação com a API-Football passa a ser pelo **ID oficial** (nascimento + nome fica como
+  reserva), e os **títulos** ficam disponíveis para muito mais jogadores;
+- a ficha ganha **links para o perfil** no SofaScore, FotMob, FBref, WhoScored e Understat.
+  O **mapa de calor**, quando a fonte do PASSE não tem, aparece como botões "Ver no SofaScore /
+  Ver no FotMob". O PASSE só aponta para as páginas: não coleta nada delas.
+
+## Perfis parecidos
+
+Na ficha, o PASSE lista jogadores da mesma família de posição (pontas com pontas, laterais
+com laterais) com **perfil estatístico semelhante** e dentro do teto do relatório, do mais
+parecido para o menos, com o que eles têm em comum. Comparação nas estatísticas por 90
+minutos (ou por jogo) normalizadas por função; exige amostra mínima e pelo menos 3
+estatísticas em comum. Não dá nota a ninguém. Rota: `GET /api/players/:id/similar?teto=`.
+
 ## Outros provedores de dados
 
 Node 20.6+ e `npm install`. Copie `.env.example` para `.env`, configure as fontes

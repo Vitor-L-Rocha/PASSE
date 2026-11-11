@@ -399,7 +399,7 @@ function renderPlayer(p) {
     <div class="sheet">
       <section>
         <h2 class="display">Mapa de calor</h2>
-        ${heatmap(p.heatmap)}
+        ${heatmap(p.heatmap, p.links)}
       </section>
       <section>
         <h2 class="display">Time e estatística por temporada</h2>
@@ -441,14 +441,46 @@ function renderPlayer(p) {
       ${p.recent ? (p.recent.current === false
         ? `<span>Temporada ${esc(p.recent.season)} e títulos: ${esc(p.recent.source)} (plano grátis libera até ${esc(p.recent.season)}; clube atual vem do perfil).</span>`
         : `<span>Clube, jogos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>`) : ''}
-      ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(k === 'transfermarkt' ? 'Transfermarkt' : k === 'sofascore' ? 'SofaScore' : k)}</a>`).join('')}
+      ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(PLATFORM[k] || k)}</a>`).join('')}
     </footer>
+
+    <section class="similar" id="similar" aria-live="polite"><h2 class="display">Perfis parecidos</h2><p class="quiet">Procurando jogadores com perfil estatístico semelhante…</p></section>
   </section>`;
+  loadSimilar(p);
 }
 
-function heatmap(h) {
+const PLATFORM = { transfermarkt: 'Transfermarkt', sofascore: 'SofaScore', fotmob: 'FotMob', fbref: 'FBref', whoscored: 'WhoScored', understat: 'Understat' };
+
+// Perfis parecidos: mesma família de posição, estatísticas semelhantes, dentro do teto do relatório.
+async function loadSimilar(p) {
+  const box = document.getElementById('similar');
+  if (!box) return;
+  const teto = report.data?.query?.maxBudgetEur;
+  try {
+    const res = await fetch(`/api/players/${encodeURIComponent(p.id)}/similar${teto ? `?teto=${teto}` : ''}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error((d.errors || []).join(' '));
+    if (document.getElementById('similar') !== box) return; // usuário já mudou de tela
+    const intro = teto ? `Mesma função, estatísticas semelhantes e valor até ${money(teto)}.` : 'Mesma função e estatísticas semelhantes.';
+    box.innerHTML = `<h2 class="display">Perfis parecidos</h2>${d.similar.length
+      ? `<p class="quiet">${esc(intro)} Do mais parecido para o menos.</p><ol class="roster">${d.similar.map((s) => {
+          const where = [s.club, [s.league, countryName(s.leagueCountry)].filter(Boolean).join(', ')].filter(Boolean).join(', ');
+          const common = s.inCommon.length ? `Também se destaca em ${esc(listPT(s.inCommon.map((c) => lower(charLabel(c)))))}.` : '';
+          return `<li><a class="row" href="#/jogador/${encodeURIComponent(s.id)}">${photo(s)}<span><span class="name">${esc(s.name)}</span><span class="where">${esc(where)}${Number.isFinite(s.age) ? `. ${s.age} anos` : ''}</span>${common ? `<span class="fit">${common}</span>` : ''}</span><span class="value num">${money(s.marketValueEur)}<small>${Number.isFinite(s.minutes) ? `${s.minutes.toLocaleString('pt-BR')} min em ${esc(s.season)}` : Number.isFinite(s.appearances) ? `${s.appearances} jogos em ${esc(s.season)}` : ''}</small></span></a></li>`;
+        }).join('')}</ol>`
+      : '<p class="unavailable">Sem estatísticas suficientes para comparar este jogador com outros.</p>'}`;
+  } catch (ex) {
+    box.innerHTML = `<h2 class="display">Perfis parecidos</h2><p class="unavailable">${esc(ex.message || 'Não foi possível buscar perfis parecidos.')}</p>`;
+  }
+}
+
+function heatmap(h, links = {}) {
   const pts = h?.points || [];
-  if (!pts.length) return `<p class="unavailable">A fonte atual não fornece mapa de calor.</p>`;
+  if (!pts.length) {
+    const where = ['sofascore', 'fotmob'].filter((k) => String(links[k] || '').startsWith('https://'));
+    return `<p class="unavailable">A fonte atual não fornece mapa de calor.${where.length ? ' Ele está disponível no perfil do jogador em:' : ''}</p>
+      ${where.length ? `<p class="heat-links">${where.map((k) => `<a class="btn line small" href="${esc(links[k])}" target="_blank" rel="noopener">Ver no ${PLATFORM[k]}</a>`).join(' ')}</p>` : ''}`;
+  }
   const max = Math.max(...pts.map((p) => p.count || 1));
   const dots = pts.map((p) => `<circle cx="${(p.x / 100) * 105}" cy="${(p.y / 100) * 68}" r="5" fill="#000" fill-opacity="${(0.1 + 0.2 * ((p.count || 1) / max)).toFixed(3)}" />`).join('');
   return `<svg class="pitch" viewBox="-1 -1 107 70" role="img" aria-label="Mapa de calor do jogador; o time ataca para a direita">

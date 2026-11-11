@@ -10,3 +10,6 @@ export const apiFootballDirectory = (directory = process.env.PASSE_API_FOOTBALL_
 // Dados da temporada atual da GOAL API (scripts/sync-goalapi.js).
 export const goalApiDirectory = (directory = process.env.PASSE_GOAL_API_DIR) =>
   path.resolve(PROJECT_ROOT, directory || '.cache/goalapi');
+// IDs do mesmo jogador em outras plataformas (scripts/sync-reep.js).
+export const reepDirectory = (directory = process.env.PASSE_REEP_DIR) =>
+  path.resolve(PROJECT_ROOT, directory || '.cache/reep');

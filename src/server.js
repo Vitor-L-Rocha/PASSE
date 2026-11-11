@@ -11,6 +11,7 @@ import { characteristicsOf } from './core/characteristics.js';
 import { searchAll, getPlayerById, availableCharacteristics, sourcesInfo } from './providers/index.js';
 import { enrichPlayerWithSofascore } from './providers/sofascoreProvider.js';
 import { titlesFor } from './providers/apiFootballTitles.js';
+import { similarPlayers, comparablePositions } from './core/similarity.js';
 
 // Acrescenta características/mapa de calor do feed autorizado do SofaScore a jogadores
 // de outras fontes que tenham ID SofaScore configurado. Sem config ou em erro, devolve o original.
@@ -69,6 +70,23 @@ export function createApp() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ errors: ['Falha ao consultar os provedores de dados.'] });
+    }
+  });
+
+  // Perfis parecidos (mesma família de posição, estatísticas semelhantes; ?teto= limita o valor).
+  app.get('/api/players/:id/similar', async (req, res) => {
+    try {
+      const target = await enrich(await getPlayerById(req.params.id));
+      if (!target) return res.status(404).json({ errors: ['Jogador não encontrado.'] });
+      const teto = req.query.teto === undefined ? undefined : Number(req.query.teto);
+      if (teto !== undefined && !(Number.isFinite(teto) && teto > 0)) return res.status(400).json({ errors: ['Teto inválido.'] });
+      const pool = [];
+      for (const position of comparablePositions(target.position)) pool.push(...(await searchAll({ position, maxBudgetEur: teto })).players);
+      const similar = similarPlayers(target, await Promise.all(pool.map(enrich)), { maxBudgetEur: teto });
+      res.json({ id: target.id, similar: similar.map(({ player, inCommon, onlyTarget }) => ({ ...summary(player), inCommon, onlyTarget })) });
+    } catch (err) {
+      console.error(err);
+      res.status(502).json({ errors: ['Falha ao buscar perfis parecidos.'] });
     }
   });
 

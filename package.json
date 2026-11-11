@@ -13,7 +13,8 @@
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "test": "node --import ./test/setup.js --test test/",
     "sync-apifootball": "node --env-file-if-exists=.env scripts/sync-apifootball.js",
-    "sync-goalapi": "node --env-file-if-exists=.env scripts/sync-goalapi.js"
+    "sync-goalapi": "node --env-file-if-exists=.env scripts/sync-goalapi.js",
+    "sync-reep": "node scripts/sync-reep.js"
   },
   "repository": {
     "type": "git",
