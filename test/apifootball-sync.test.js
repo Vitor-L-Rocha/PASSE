@@ -139,3 +139,83 @@ test('plano sem acesso à temporada: --check informa claramente e não quebra', 
   }
   assert.ok(logs.some((l) => /SEM acesso à temporada 2026: Free plans do not have access/.test(l)), logs.join('\n'));
 });
+
+test('plano que só libera temporada antiga: usa a mais recente permitida sem trocar o clube atual', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'passe-afh-'));
+  fs.mkdirSync(path.join(root, 'tm'));
+  fs.writeFileSync(path.join(root, 'tm', 'players.json'), JSON.stringify({
+    leagues: [{ id: 'BRA1', name: 'Brasileirão Série A', country: 'BR' }],
+    players: [{ id: 'tmdata-20', source: 'tmdata', name: 'Ana Meia', dateOfBirth: '2000-02-02', position: 'AM', leagueCountry: 'BR',
+      league: 'Brasileirão Série A', club: 'Clube Atual', marketValueEur: 1_000_000, stats: {}, seasons: [] }],
+  }));
+  const seasonsAsked = [];
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    let body;
+    if (u.pathname.endsWith('/status')) body = { errors: [], response: { subscription: { plan: 'Free' }, requests: { current: 0, limit_day: 100 } } };
+    else if (u.pathname.endsWith('/leagues')) body = { errors: [], response: [{ league: { name: 'Serie A' }, country: { name: 'Brazil' }, seasons: [{ year: 2026, current: true }] }] };
+    else {
+      seasonsAsked.push(u.searchParams.get('season'));
+      body = u.searchParams.get('season') === '2026'
+        ? { errors: { plan: 'Free plans do not have access to this season, try from 2022 to 2024.' } }
+        : { errors: [], paging: { current: 1, total: 1 }, response: [{ player: { id: 900, name: 'A. Meia', firstname: 'Ana', lastname: 'Meia', birth: { date: '2000-02-02' } },
+          statistics: [stat({ team: 'Clube Antigo 2024', apps: 20, min: 1600, rating: '7.1', g: 3, a: 6, sh: 20, kp: 50, dr: 40, tk: 10, int: 5, dt: 150, dw: 80 })] }] };
+    }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const prev = { tm: process.env.PASSE_TMDATA_DIR, af: process.env.PASSE_API_FOOTBALL_DIR };
+  Object.assign(process.env, { PASSE_TMDATA_DIR: path.join(root, 'tm'), PASSE_API_FOOTBALL_DIR: path.join(root, 'af') });
+  try {
+    const logs = [];
+    await sync({ client: createClient({ key: 'k', baseUrl: 'http://api.invalid/', fetchImpl }), leagues: ['BRA1'], log: (m) => logs.push(m) });
+    assert.deepEqual(seasonsAsked, ['2026', '2024']);
+    assert.ok(logs.some((l) => /usando 2024/.test(l)), logs.join('\n'));
+    const { createTmdataProvider } = await import('../src/providers/tmdataProvider.js');
+    const p = await createTmdataProvider().getPlayer('tmdata-20');
+    assert.equal(p.club, 'Clube Atual', 'clube do perfil não é trocado por dado de 2024');
+    assert.equal(p.season, '2024');
+    assert.equal(p.recent.current, false);
+    assert.ok(p.stats.dribbles > 0, 'sem estatísticas no índice: usa as de 2024, rotuladas');
+    assert.equal(p.apiFootballId, 900);
+  } finally {
+    for (const [k, v] of [['PASSE_TMDATA_DIR', prev.tm], ['PASSE_API_FOOTBALL_DIR', prev.af]]) (v === undefined ? delete process.env[k] : (process.env[k] = v));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('plano com limite de páginas: passa a buscar time por time e completa a liga', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'passe-aft-'));
+  fs.mkdirSync(path.join(root, 'tm'));
+  fs.writeFileSync(path.join(root, 'tm', 'players.json'), JSON.stringify({ leagues: [], players: [] }));
+  const asked = [];
+  const player = (id) => ({ player: { id, name: `P${id}`, birth: { date: '2000-01-01' } },
+    statistics: [stat({ team: 'T', apps: 10, min: 900, rating: '7', g: 1, a: 1, sh: 1, kp: 1, dr: 1, tk: 1, int: 1, dt: 10, dw: 5 })] });
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    const q = Object.fromEntries(u.searchParams);
+    asked.push(`${u.pathname.split('/').pop()}?${new URLSearchParams(q)}`);
+    let body;
+    if (u.pathname.endsWith('/status')) body = { errors: [], response: { requests: { current: 0, limit_day: 100 } } };
+    else if (u.pathname.endsWith('/leagues')) body = { errors: [], response: [{ league: { name: 'L' }, country: { name: 'Brazil' }, seasons: [{ year: 2024, current: true }] }] };
+    else if (u.pathname.endsWith('/teams')) body = { errors: [], response: [{ team: { id: 1 } }, { team: { id: 2 } }] };
+    else if (q.league && q.page === '1') body = { errors: [], paging: { current: 1, total: 9 }, response: [player(100)] };
+    else if (q.league) body = { errors: { page: 'Free plans are limited to a maximum value of 3 for the Page parameter' } };
+    else body = { errors: [], paging: { current: Number(q.page), total: 2 }, response: [player(Number(q.team) * 10 + Number(q.page))] };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const prev = { tm: process.env.PASSE_TMDATA_DIR, af: process.env.PASSE_API_FOOTBALL_DIR };
+  Object.assign(process.env, { PASSE_TMDATA_DIR: path.join(root, 'tm'), PASSE_API_FOOTBALL_DIR: path.join(root, 'af') });
+  try {
+    const logs = [];
+    // Simula o limite: a 4ª página da liga é recusada.
+    const capped = async (url) => { const u = new URL(url); if (u.searchParams.get('league') && Number(u.searchParams.get('page')) > 3) return fetchImpl(url); return fetchImpl(url); };
+    await sync({ client: createClient({ key: 'k', baseUrl: 'http://api.invalid/', fetchImpl: capped }), leagues: ['BRA1'], log: (m) => logs.push(m) });
+    assert.ok(logs.some((l) => /time por time/.test(l)), logs.join('\n'));
+    assert.ok(logs.some((l) => /2\/2 times/.test(l)), logs.join('\n'));
+    const saved = JSON.parse(fs.readFileSync(path.join(root, 'af', 'leagues', 'BRA1-2024.json'), 'utf8'));
+    assert.deepEqual(saved.players.map((p) => p.id).sort((a, b) => a - b), [11, 12, 21, 22, 100]);
+  } finally {
+    for (const [k, v] of [['PASSE_TMDATA_DIR', prev.tm], ['PASSE_API_FOOTBALL_DIR', prev.af]]) (v === undefined ? delete process.env[k] : (process.env[k] = v));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

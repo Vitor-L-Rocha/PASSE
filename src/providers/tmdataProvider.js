@@ -18,10 +18,13 @@ const RECENT_CHARACTERISTICS = ['drible', 'passesDecisivos', 'desarme', 'interce
 function applyRecent(p, r, nonnegative) {
   const stats = r.stats && typeof r.stats === 'object'
     ? Object.fromEntries(Object.entries(r.stats).filter(([, v]) => nonnegative(v) != null)) : {};
-  if (r.team) p.club = String(r.team);
-  if (r.leagueName) p.league = String(r.leagueName);
-  if (getCountry(r.leagueCountry)) p.leagueCountry = getCountry(r.leagueCountry).code;
-  if (nonnegative(r.minutes)) {
+  // Temporada ANTERIOR (plano que não libera a atual): não sobrescreve clube/liga com
+  // dado velho e só usa as estatísticas se o jogador não tiver nenhuma no índice.
+  const current = r.current !== false;
+  if (current && r.team) p.club = String(r.team);
+  if (current && r.leagueName) p.league = String(r.leagueName);
+  if (current && getCountry(r.leagueCountry)) p.leagueCountry = getCountry(r.leagueCountry).code;
+  if (nonnegative(r.minutes) && (current || !nonnegative(p.minutes))) {
     p.minutes = r.minutes;
     p.appearances = nonnegative(r.appearances);
     p.season = r.season;
@@ -30,9 +33,10 @@ function applyRecent(p, r, nonnegative) {
   if (!p.photoUrl) p.photoUrl = safeUrl(r.photo);
   const row = { season: r.season, club: r.team || null, league: r.leagueName || null, appearances: nonnegative(r.appearances),
     minutes: nonnegative(r.minutes), goals: nonnegative(r.goals), assists: nonnegative(r.assists), rating: nonnegative(r.rating) };
-  p.seasons = [row, ...p.seasons.filter((s) => !(s.season === row.season && s.club === row.club))];
+  p.seasons = [row, ...p.seasons.filter((s) => !(s.season === row.season && s.club === row.club))]
+    .sort((a, b) => String(b.season).localeCompare(String(a.season)));
   p.apiFootballId = Number.isInteger(r.apiId) ? r.apiId : null;
-  p.recent = { source: 'API-Football', season: r.season, fetchedAt: r.fetchedAt || null };
+  p.recent = { source: 'API-Football', season: r.season, current, fetchedAt: r.fetchedAt || null };
 }
 
 export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {

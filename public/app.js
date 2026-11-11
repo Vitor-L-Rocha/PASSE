@@ -438,7 +438,9 @@ function renderPlayer(p) {
 
     <footer class="colophon">
       <span>Perfil, valor e contrato: ${esc(sourceName(p.source))}.</span>
-      ${p.recent ? `<span>Clube, minutos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>` : ''}
+      ${p.recent ? (p.recent.current === false
+        ? `<span>Temporada ${esc(p.recent.season)} e títulos: ${esc(p.recent.source)} (plano grátis libera até ${esc(p.recent.season)}; clube atual vem do perfil).</span>`
+        : `<span>Clube, minutos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>`) : ''}
       ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(k === 'transfermarkt' ? 'Transfermarkt' : k === 'sofascore' ? 'SofaScore' : k)}</a>`).join('')}
     </footer>
   </section>`;
