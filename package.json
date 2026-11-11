@@ -14,7 +14,8 @@
     "test": "node --import ./test/setup.js --test test/",
     "sync-apifootball": "node --env-file-if-exists=.env scripts/sync-apifootball.js",
     "sync-goalapi": "node --env-file-if-exists=.env scripts/sync-goalapi.js",
-    "sync-reep": "node scripts/sync-reep.js"
+    "sync-reep": "node scripts/sync-reep.js",
+    "sync-salimt": "node scripts/sync-salimt.js"
   },
   "repository": {
     "type": "git",

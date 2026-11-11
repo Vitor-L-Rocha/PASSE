@@ -2,7 +2,7 @@
 // são os do snapshot; generatedAt do índice não significa atualização da origem.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tmdataDirectory, apiFootballDirectory, goalApiDirectory, reepDirectory } from './tmdataPaths.js';
+import { tmdataDirectory, apiFootballDirectory, goalApiDirectory, reepDirectory, salimtDirectory } from './tmdataPaths.js';
 import { getCountry } from '../data/countries.js';
 import { getPosition } from '../data/positions.js';
 import { matchesQuery } from './normalization.js';
@@ -64,6 +64,44 @@ export function profileLinks(name, ids = {}) {
   return links;
 }
 
+// Complementos do football-datasets (CC0): lesões e temporadas por competição.
+// Temporadas só entram onde nenhuma outra fonte tem a mesma temporada; gols/assistências
+// só viram estatística para o ranking se o jogador não tiver nenhuma outra (última opção).
+function applyExtras(p, x, nonnegative) {
+  if (Array.isArray(x.injuries)) {
+    p.injuries = x.injuries.slice(0, 12).map((i) => ({ reason: i.reason || null, from: i.from || null, to: i.to || null,
+      daysMissed: nonnegative(i.daysMissed), gamesMissed: nonnegative(i.gamesMissed) }));
+    // Lesionado no último registro da fonte (set/2026): lesão sem data de fim ou terminando depois dele.
+    const last = p.injuries[0];
+    p.injuredAtSnapshot = Boolean(last && (!last.to || last.to >= '2026-09-28'));
+  }
+  const rows = Array.isArray(x.seasons) ? x.seasons : [];
+  const have = new Set(p.seasons.map((s) => s.season));
+  const extra = rows.filter((r) => r.season && !have.has(r.season)).map((r) => ({ season: r.season, club: r.club || null, league: r.league || null,
+    appearances: nonnegative(r.appearances), minutes: nonnegative(r.minutes), goals: nonnegative(r.goals), assists: nonnegative(r.assists), rating: null }));
+  if (extra.length) {
+    p.seasons = [...p.seasons, ...extra].sort((a, b) => String(b.season).localeCompare(String(a.season))).slice(0, 14);
+  }
+  const hasStats = nonnegative(p.minutes) || (p.stats && Object.keys(p.stats).length);
+  if (!hasStats) {
+    const bySeason = new Map();
+    for (const r of rows) {
+      if (r.competitionId !== p.leagueId || r.year < 2024) continue;
+      const t = bySeason.get(r.season) || { season: r.season, year: r.year, minutes: 0, goals: 0, assists: 0, appearances: 0 };
+      t.minutes += nonnegative(r.minutes) || 0; t.goals += nonnegative(r.goals) || 0; t.assists += nonnegative(r.assists) || 0; t.appearances += nonnegative(r.appearances) || 0;
+      bySeason.set(r.season, t);
+    }
+    const ref = [...bySeason.values()].sort((a, b) => b.year - a.year).find((t) => t.minutes >= 450);
+    if (ref) {
+      p.minutes = ref.minutes;
+      p.appearances = ref.appearances;
+      p.season = ref.season;
+      p.stats = { goals: (ref.goals * 90) / ref.minutes, assists: (ref.assists * 90) / ref.minutes };
+      p.statsNote = 'dados até set/2025';
+    }
+  }
+}
+
 export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {
   let loaded;
   function load() {
@@ -78,11 +116,13 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
       path.join(goalApiDirectory(env.PASSE_GOAL_API_DIR), 'enrichment.json'),
     ];
     const idsFile = path.join(reepDirectory(env.PASSE_REEP_DIR), 'ids.json');
-    enrichFiles.push(idsFile);
+    const extrasFile = path.join(salimtDirectory(env.PASSE_SALIMT_DIR), 'extras.json');
+    enrichFiles.push(idsFile, extrasFile);
     const enrichStats = enrichFiles.map((f) => { try { return fs.statSync(f); } catch { return null; } });
     const signature = `${file}|${stat.mtimeMs}|${stat.ctimeMs}|${stat.size}|${stat.ino}|${enrichStats.map((x) => `${x?.mtimeMs ?? '-'}:${x?.size ?? '-'}`).join('|')}`;
     if (loaded?.signature === signature) return loaded;
     const reepIds = (() => { try { return JSON.parse(fs.readFileSync(idsFile, 'utf8')).players || {}; } catch { return {}; } })();
+    const extras = (() => { try { return JSON.parse(fs.readFileSync(extrasFile, 'utf8')).players || {}; } catch { return {}; } })();
     const recentSets = enrichFiles.slice(0, 2).map((f, i) => {
       if (!enrichStats[i]) return {};
       try { return JSON.parse(fs.readFileSync(f, 'utf8')).players || {}; } catch { return {}; }
@@ -108,6 +148,7 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
         characteristics: null });
       const entry = byId.get(p.id);
       for (const set of recentSets) if (set[p.id]) applyRecent(entry, set[p.id], nonnegative);
+      if (extras[p.id]) applyExtras(entry, extras[p.id], nonnegative);
       const ids = reepIds[p.id];
       if (ids) {
         entry.links = { ...entry.links, ...profileLinks(entry.name, ids) };

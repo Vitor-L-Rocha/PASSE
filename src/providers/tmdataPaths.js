@@ -13,3 +13,6 @@ export const goalApiDirectory = (directory = process.env.PASSE_GOAL_API_DIR) =>
 // IDs do mesmo jogador em outras plataformas (scripts/sync-reep.js).
 export const reepDirectory = (directory = process.env.PASSE_REEP_DIR) =>
   path.resolve(PROJECT_ROOT, directory || '.cache/reep');
+// Lesões e temporadas por competição (scripts/sync-salimt.js).
+export const salimtDirectory = (directory = process.env.PASSE_SALIMT_DIR) =>
+  path.resolve(PROJECT_ROOT, directory || '.cache/salimt');

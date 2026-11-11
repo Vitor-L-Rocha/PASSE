@@ -322,6 +322,7 @@ function rosterRow(p) {
   const where = [p.club, [p.league, countryName(p.leagueCountry)].filter(Boolean).join(', ')].filter(Boolean).join(', ');
   const who = [Number.isFinite(p.age) && `${p.age} anos`, p.foot && `pé ${p.foot}`].filter(Boolean).join(', ');
   let fit;
+  const injury = p.injuredAtSnapshot ? '<span class="injury-flag">Lesionado no último registro (set/2026).</span>' : '';
   if (m.noData) {
     fit = p.characteristics?.source === 'indisponivel'
       ? '<span class="quiet">Sem dados de desempenho nesta fonte.</span>'
@@ -339,7 +340,7 @@ function rosterRow(p) {
     <span>
       <span class="name">${esc(p.name)}</span>
       <span class="where">${esc(where)}${who ? `. ${esc(who)}` : ''}</span>
-      ${fit ? `<span class="fit">${fit}</span>` : ''}
+      ${fit ? `<span class="fit">${fit}</span>` : ''}${injury}
     </span>
     <span class="value num">${money(p.marketValueEur)}<small>${Number.isFinite(p.minutes) ? `${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)}` : Number.isFinite(p.appearances) && p.season ? `${p.appearances} jogos em ${esc(p.season)}` : 'valor de mercado'}</small></span>
   </button></li>`;
@@ -425,13 +426,17 @@ function renderPlayer(p) {
           : `<p class="unavailable">${Array.isArray(p.titles) ? 'Nenhum título conquistado registrado na fonte.' : 'Títulos disponíveis para jogadores atualizados pela API-Football (configure a chave e rode npm run sync-apifootball).'}</p>`}
       </section>
       <section>
+        <h2 class="display">Lesões</h2>
+        ${injuries(p)}
+      </section>
+      <section>
         <h2 class="display">Características</h2>
         ${chars.source === 'indisponivel'
           ? `<p class="unavailable">Sem estatísticas suficientes para apontar pontos fortes ou fracos deste jogador.</p>`
           : `<div class="chars"><h3>Pontos fortes</h3><div class="marks">${chars.positive.length ? chars.positive.map((c) => `<span class="mark${desired.includes(c) ? ' hit' : ''}">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum destaque nas estatísticas disponíveis.</span>'}</div></div>
              <div class="chars"><h3>Pontos fracos</h3><div class="marks">${chars.negative.length ? chars.negative.map((c) => `<span class="mark weak">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum apontado.</span>'}</div></div>
              <p class="src">${chars.source === 'estatisticas'
-               ? `Deduzidas ${p.recent ? `das estatísticas da ${esc(p.recent.source)}` : 'de gols e assistências'} ${p.perGame ? 'por jogo (a fonte não informa minutos)' : 'por 90 minutos'}${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : Number.isFinite(p.appearances) && p.season ? ` (${p.appearances} jogos em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.`
+               ? `Deduzidas ${p.recent ? `das estatísticas da ${esc(p.recent.source)}` : 'de gols e assistências'} ${p.perGame ? 'por jogo (a fonte não informa minutos)' : 'por 90 minutos'}${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)}${p.statsNote ? `, ${esc(p.statsNote)}` : ''})` : Number.isFinite(p.appearances) && p.season ? ` (${p.appearances} jogos em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.`
                : 'Informadas pela fonte.'}${desired.length ? ' Em preto, as que você procurou.' : ''}</p>`}
       </section>
     </div>
@@ -472,6 +477,30 @@ async function loadSimilar(p) {
   } catch (ex) {
     box.innerHTML = `<h2 class="display">Perfis parecidos</h2><p class="unavailable">${esc(ex.message || 'Não foi possível buscar perfis parecidos.')}</p>`;
   }
+}
+
+const INJURY_PT = {
+  'unknown injury': 'Lesão não especificada', 'muscle injury': 'Lesão muscular', 'hamstring injury': 'Lesão no posterior da coxa',
+  'knee injury': 'Lesão no joelho', 'ankle injury': 'Lesão no tornozelo', 'thigh problems': 'Problema na coxa', 'calf injury': 'Lesão na panturrilha',
+  'groin injury': 'Lesão na virilha', 'adductor injury': 'Lesão no adutor', 'back injury': 'Lesão nas costas', 'foot injury': 'Lesão no pé',
+  'knock': 'Pancada', 'illness': 'Doença', 'cruciate ligament tear': 'Ruptura do ligamento cruzado', 'torn muscle fibre': 'Ruptura de fibras musculares',
+  'muscle fatigue': 'Fadiga muscular', 'hip injury': 'Lesão no quadril', 'shoulder injury': 'Lesão no ombro', 'fitness': 'Condicionamento físico',
+  'corona virus': 'Covid-19', 'concussion': 'Concussão', 'fracture': 'Fratura', 'achilles tendon problems': 'Problema no tendão de Aquiles',
+};
+const injuryName = (r) => INJURY_PT[String(r || '').toLowerCase()] || r || 'Lesão';
+
+function injuries(p) {
+  const list = p.injuries;
+  if (!Array.isArray(list)) return '<p class="unavailable">A fonte atual não informa lesões deste jogador.</p>';
+  if (!list.length) return '<p class="quiet">Nenhuma lesão registrada desde jul/2022.</p>';
+  const since = new Date(); since.setFullYear(since.getFullYear() - 2);
+  const recent = list.filter((i) => i.from && new Date(i.from) >= since);
+  const days = recent.reduce((s, i) => s + (i.daysMissed || 0), 0);
+  const games = recent.reduce((s, i) => s + (i.gamesMissed || 0), 0);
+  return `${p.injuredAtSnapshot ? '<p class="injury-flag">Lesionado no último registro da fonte (set/2026).</p>' : ''}
+    <p class="quiet">Nos últimos 2 anos: ${recent.length} lesões, ${days} dias e ${games} jogos fora.</p>
+    <ul class="titles">${list.slice(0, 6).map((i) => `<li><span class="num">${esc(i.from ? dateBR(i.from).slice(3) : '')}</span><span>${esc(injuryName(i.reason))}<br><span class="quiet">${i.daysMissed != null ? `${i.daysMissed} dias` : 'duração não informada'}${i.gamesMissed ? `, ${i.gamesMissed} jogos` : ''}${i.to ? '' : ', sem data de retorno'}</span></span></li>`).join('')}</ul>
+    <p class="src">Fonte: football-datasets (CC0), registros até set/2026.</p>`;
 }
 
 function heatmap(h, links = {}) {

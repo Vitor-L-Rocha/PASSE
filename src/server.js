@@ -111,8 +111,8 @@ export function createApp() {
 
 // Versão compacta para a listagem; o dashboard busca o detalhe completo.
 function summary(p) {
-  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics, season, minutes, appearances } = p;
-  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics, season: season ?? null, minutes: minutes ?? null, appearances: appearances ?? null };
+  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics, season, minutes, appearances, injuredAtSnapshot } = p;
+  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics, season: season ?? null, minutes: minutes ?? null, appearances: appearances ?? null, injuredAtSnapshot: Boolean(injuredAtSnapshot) };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

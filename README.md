@@ -112,6 +112,22 @@ Com isso:
   O **mapa de calor**, quando a fonte do PASSE não tem, aparece como botões "Ver no SofaScore /
   Ver no FotMob". O PASSE só aponta para as páginas: não coleta nada delas.
 
+## Lesões e temporadas por competição (football-datasets)
+
+`npm run sync-salimt` usa o [football-datasets](https://github.com/salimt/football-datasets)
+(sem licença no GitHub, mas publicado pelo próprio autor no
+[Kaggle](https://www.kaggle.com/datasets/xfkzujqjvx97n/football-datasets) sob **CC0**). Os IDs
+são os do Transfermarkt, então a ligação com o índice é exata. Baixa ~170 MB.
+
+- **Histórico de lesões** (registros até **28/09/2026**): 33.953 lesões desde jul/2022 para
+  jogadores do índice. A ficha mostra dias e jogos perdidos nos últimos 2 anos e as lesões
+  recentes; o relatório avisa quem estava **lesionado no último registro**.
+- **Temporadas por competição** (até **set/2025**), de todas as ligas, inclusive o
+  Brasileirão: completam a tabela da ficha onde nenhuma outra fonte tem a temporada, e
+  gols/assistências só viram estatística para o ranking se o jogador não tiver nenhuma outra.
+- **Não** é mais recente que o índice em valor de mercado e clube (vai até set/2025), por
+  isso esses campos continuam vindo do índice.
+
 ## Perfis parecidos
 
 Na ficha, o PASSE lista jogadores da mesma família de posição (pontas com pontas, laterais
