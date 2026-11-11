@@ -58,7 +58,10 @@ export function createApp() {
       // Enriquecer ANTES do ranking: o relatório e a ficha usam as mesmas características.
       const players = await Promise.all(found.players.map(enrich));
       const ranking = rankPlayers(players, { country, maxBudgetEur: budget, position, criteria, available: availableCharacteristics() });
+      // Total real por mercado antes de limitar a lista exibida.
+      ranking.marketTotals = {};
       for (const k of Object.keys(ranking.markets)) {
+        ranking.marketTotals[k] = ranking.markets[k].length;
         ranking.markets[k] = ranking.markets[k].slice(0, MAX_RESULTS_PER_MARKET).map(summary);
       }
       res.json({ query: { country, maxBudgetEur: budget, position }, criteria, providers, providerErrors, ...ranking });
