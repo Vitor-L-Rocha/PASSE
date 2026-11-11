@@ -2,11 +2,38 @@
 // são os do snapshot; generatedAt do índice não significa atualização da origem.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tmdataDirectory } from './tmdataPaths.js';
+import { tmdataDirectory, apiFootballDirectory } from './tmdataPaths.js';
 import { getCountry } from '../data/countries.js';
 import { getPosition } from '../data/positions.js';
 import { matchesQuery } from './normalization.js';
 import { normalizeSeasons, safeUrl } from './dashboard.js';
+
+const BASE_CHARACTERISTICS = ['finalizacao', 'criacao'];
+// Avaliáveis com as estatísticas da API-Football (sem dados de cruzamento, jogo aéreo ou velocidade).
+const RECENT_CHARACTERISTICS = ['drible', 'passesDecisivos', 'desarme', 'interceptacao', 'duelosNoChao', 'consistencia', 'reflexos'];
+
+// Sobrepõe ao snapshot do índice os dados da temporada ATUAL vindos da API-Football:
+// clube e liga atuais, minutos, estatísticas e nota da fonte. Valor de mercado,
+// contrato e foto continuam vindo do índice.
+function applyRecent(p, r, nonnegative) {
+  const stats = r.stats && typeof r.stats === 'object'
+    ? Object.fromEntries(Object.entries(r.stats).filter(([, v]) => nonnegative(v) != null)) : {};
+  if (r.team) p.club = String(r.team);
+  if (r.leagueName) p.league = String(r.leagueName);
+  if (getCountry(r.leagueCountry)) p.leagueCountry = getCountry(r.leagueCountry).code;
+  if (nonnegative(r.minutes)) {
+    p.minutes = r.minutes;
+    p.appearances = nonnegative(r.appearances);
+    p.season = r.season;
+    p.stats = stats;
+  }
+  if (!p.photoUrl) p.photoUrl = safeUrl(r.photo);
+  const row = { season: r.season, club: r.team || null, league: r.leagueName || null, appearances: nonnegative(r.appearances),
+    minutes: nonnegative(r.minutes), goals: nonnegative(r.goals), assists: nonnegative(r.assists), rating: nonnegative(r.rating) };
+  p.seasons = [row, ...p.seasons.filter((s) => !(s.season === row.season && s.club === row.club))];
+  p.apiFootballId = Number.isInteger(r.apiId) ? r.apiId : null;
+  p.recent = { source: 'API-Football', season: r.season, fetchedAt: r.fetchedAt || null };
+}
 
 export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {
   let loaded;
@@ -15,8 +42,15 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
     let stat;
     try { stat = fs.statSync(file); } catch { loaded = null; return null; }
     if (!stat.isFile()) return null;
-    const signature = `${file}|${stat.mtimeMs}|${stat.ctimeMs}|${stat.size}|${stat.ino}`;
+    const enrichFile = path.join(apiFootballDirectory(env.PASSE_API_FOOTBALL_DIR), 'enrichment.json');
+    let enrichStat = null;
+    try { enrichStat = fs.statSync(enrichFile); } catch { /* sem dados recentes */ }
+    const signature = `${file}|${stat.mtimeMs}|${stat.ctimeMs}|${stat.size}|${stat.ino}|${enrichStat?.mtimeMs ?? '-'}|${enrichStat?.size ?? '-'}`;
     if (loaded?.signature === signature) return loaded;
+    let recent = {};
+    if (enrichStat) {
+      try { recent = JSON.parse(fs.readFileSync(enrichFile, 'utf8')).players || {}; } catch { recent = {}; }
+    }
     let index;
     try { index = JSON.parse(fs.readFileSync(file, 'utf8')); }
     catch { throw new Error('Índice de dados reais ilegível; rode npm run sync-data.'); }
@@ -36,9 +70,12 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
         links: safeUrl(p.links?.transfermarkt) ? { transfermarkt: safeUrl(p.links.transfermarkt) } : {},
         seasons: normalizeSeasons(p.seasons), titles: null, heatmap: null, // fonte não informa títulos nem mapa de calor
         characteristics: null });
+      const r = recent[p.id];
+      if (r) applyRecent(byId.get(p.id), r, nonnegative);
     }
     if (index.players.length && !byId.size) throw new Error('Índice sem jogadores válidos; rode npm run sync-data.');
-    loaded = { signature, index, byId };
+    const recentCount = [...byId.values()].filter((p) => p.recent).length;
+    loaded = { signature, index, byId, recentCount };
     return loaded;
   }
   function snapshot(player) {
@@ -56,11 +93,16 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
   }
   return {
     name: 'tmdata', label: 'transfermarkt-datasets (dados abertos, CC0)',
-    characteristics: ['finalizacao', 'criacao'],
+    // Com dados recentes da API-Football, mais características passam a ser avaliáveis.
+    get characteristics() {
+      let hasRecent = false;
+      try { hasRecent = Boolean(load()?.recentCount); } catch { /* índice inválido */ }
+      return hasRecent ? [...BASE_CHARACTERISTICS, ...RECENT_CHARACTERISTICS] : [...BASE_CHARACTERISTICS];
+    },
     isEnabled() { try { return Boolean(load()?.byId.size); } catch { return false; } },
     info() {
       const l = load();
-      return l ? { ...l.index.source, generatedAt: l.index.generatedAt, players: l.byId.size } : null;
+      return l ? { ...l.index.source, generatedAt: l.index.generatedAt, players: l.byId.size, recentPlayers: l.recentCount } : null;
     },
     async searchPlayers(query = {}) {
       const l = load();

@@ -10,6 +10,7 @@ import { rankPlayers } from './core/matcher.js';
 import { characteristicsOf } from './core/characteristics.js';
 import { searchAll, getPlayerById, availableCharacteristics, sourcesInfo } from './providers/index.js';
 import { enrichPlayerWithSofascore } from './providers/sofascoreProvider.js';
+import { titlesFor } from './providers/apiFootballTitles.js';
 
 // Acrescenta características/mapa de calor do feed autorizado do SofaScore a jogadores
 // de outras fontes que tenham ID SofaScore configurado. Sem config ou em erro, devolve o original.
@@ -75,6 +76,11 @@ export function createApp() {
     try {
       const player = await enrich(await getPlayerById(req.params.id));
       if (!player) return res.status(404).json({ errors: ['Jogador não encontrado.'] });
+      // Títulos pela API-Football quando a fonte principal não informa (1 consulta, cache de 30 dias).
+      if (!Array.isArray(player.titles) && Number.isInteger(player.apiFootballId)) {
+        const t = await titlesFor(player.apiFootballId);
+        if (t) Object.assign(player, { titles: t.titles, titlesSource: t.source });
+      }
       res.json({ ...player, characteristics: characteristicsOf(player) });
     } catch (err) {
       console.error(err);

@@ -46,6 +46,32 @@ atomicamente; falhas de parsing/download preservam o anterior. `npm start`
 reconstrói índices antigos/inválidos; `npm run sync-data` reconstrói a qualquer
 momento (reutilizando os CSVs válidos em cache por sete dias).
 
+## Dados recentes, mais características e títulos (API-Football)
+
+O índice acima é uma foto de julho de 2026. Para trazer a **temporada atual**, use
+a [API-Football](https://www.api-football.com) (API-Sports v3, acesso oficial; plano
+grátis com 100 consultas por dia):
+
+1. Crie a conta grátis em https://dashboard.api-football.com e copie a chave.
+2. Copie `.env.example` para `.env` e preencha `PASSE_API_FOOTBALL_KEY`.
+3. `npm run sync-apifootball -- --check` confere a chave, o plano e se ele libera a
+   temporada atual (o PASSE avisa se o plano só permite temporadas antigas).
+4. `npm run sync-apifootball` atualiza as ligas de `PASSE_API_FOOTBALL_SYNC_LEAGUES`
+   (padrão `BRA1`; o Brasileirão leva ~30 consultas). A cota é respeitada e a
+   sincronização continua de onde parou na execução seguinte.
+
+Cada jogador da API-Football é ligado ao do índice pela **data de nascimento e nome**.
+Os ligados passam a ter:
+
+- **clube atual**, jogos, minutos, gols e assistências da temporada corrente e a
+  **nota média da API-Football** (exibida como nota da fonte);
+- mais **características avaliáveis**: drible, passes decisivos, criação, desarme,
+  interceptação, duelos no chão, consistência e reflexos (goleiros);
+- **títulos** na ficha (rota `/trophies`, uma consulta por jogador, cache de 30 dias).
+
+Valor de mercado, contrato e foto continuam vindo do índice. **Mapa de calor** não é
+oferecido pela API-Football e segue indisponível. `npm start` lê o `.env` sozinho.
+
 ## Outros provedores de dados
 
 Node 20.6+ e `npm install`. Copie `.env.example` para `.env`, configure as fontes

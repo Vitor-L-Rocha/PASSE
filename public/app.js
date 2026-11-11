@@ -144,7 +144,7 @@ function renderHome() {
       .map((c) => `<button type="button" class="toggle" data-code="${c.code}" aria-pressed="${draft.selected.includes(c.code)}">${esc(c.label)}</button>`)
       .join('');
     document.getElementById('chars-note').textContent = missing.length
-      ? `${usable.length ? `Com os dados atuais dá para avaliar ${listPT(usable.map((c) => lower(c.label)))}.` : 'Os dados atuais não permitem avaliar características desta posição.'} ${missing.slice(0, 3).map((c) => c.label).map((l, i) => (i ? lower(l) : l)).join(', ')}${missing.length > 3 ? ' e outras' : ''} dependem de estatísticas mais detalhadas.`
+      ? `${usable.length ? `Com os dados atuais dá para avaliar ${listPT(usable.map((c) => lower(c.label)))}.` : 'Os dados atuais não permitem avaliar características desta posição.'} ${missing.slice(0, 3).map((c) => c.label).map((l, i) => (i ? lower(l) : l)).join(', ')}${missing.length > 3 ? ' e outras' : ''} dependem de estatísticas mais detalhadas${meta.sources?.some((x) => x.info?.recentPlayers) ? '' : ' (configure a API-Football para liberar mais características)'}.`
       : '';
   };
   renderToggles();
@@ -267,7 +267,7 @@ function renderReport() {
         ${d.criteria.text ? `<div><dt>Descrição</dt><dd>“${esc(d.criteria.text)}”</dd></div>` : ''}
       </dl>
       <a class="btn" href="#/">Alterar busca</a>
-      ${source ? `<p class="source">Dados: ${esc(source.info?.name || source.label)}${source.info?.license ? `, licença ${esc(source.info.license)}` : ''}.</p>` : ''}
+      ${source ? `<p class="source">Dados: ${esc(source.info?.name || source.label)}${source.info?.license ? `, licença ${esc(source.info.license)}` : ''}.${source.info?.recentPlayers ? ` ${source.info.recentPlayers.toLocaleString('pt-BR')} jogadores com temporada atual pela API-Football.` : ''}</p>` : ''}
     </aside>
     <div class="board">
       <header>
@@ -322,7 +322,11 @@ function rosterRow(p) {
   const where = [p.club, [p.league, countryName(p.leagueCountry)].filter(Boolean).join(', ')].filter(Boolean).join(', ');
   const who = [Number.isFinite(p.age) && `${p.age} anos`, p.foot && `pé ${p.foot}`].filter(Boolean).join(', ');
   let fit;
-  if (m.noData) fit = '<span class="quiet">Sem dados de desempenho nesta fonte.</span>';
+  if (m.noData) {
+    fit = p.characteristics?.source === 'indisponivel'
+      ? '<span class="quiet">Sem dados de desempenho nesta fonte.</span>'
+      : '<span class="quiet">Os dados deste jogador não cobrem as características pedidas.</span>';
+  }
   else if (m.desiredCount) {
     fit = m.matched.length
       ? `Atende <b>${esc(listPT(m.matched.map((c) => lower(charLabel(c)))))}</b>${m.matched.length < m.desiredCount ? ` (${m.matched.length} de ${m.desiredCount})` : ''}.`
@@ -416,8 +420,9 @@ function renderPlayer(p) {
       <section>
         <h2 class="display">Títulos</h2>
         ${Array.isArray(p.titles) && p.titles.length
-          ? `<ul class="titles">${p.titles.map((t) => `<li><span class="num">${esc(t.season)}</span><span>${esc(t.name)}${t.club ? `<br><span class="quiet">${esc(t.club)}</span>` : ''}</span></li>`).join('')}</ul>`
-          : `<p class="unavailable">${Array.isArray(p.titles) ? 'Nenhum título registrado na fonte.' : 'A fonte atual não informa títulos.'}</p>`}
+          ? `<ul class="titles">${p.titles.map((t) => `<li><span class="num">${esc(t.season || '')}</span><span>${esc(t.name)}${t.club ? `<br><span class="quiet">${esc(t.club)}</span>` : ''}</span></li>`).join('')}</ul>
+             ${p.titlesSource ? `<p class="src">Fonte dos títulos: ${esc(p.titlesSource)}.</p>` : ''}`
+          : `<p class="unavailable">${Array.isArray(p.titles) ? 'Nenhum título conquistado registrado na fonte.' : 'Títulos disponíveis para jogadores atualizados pela API-Football (configure a chave e rode npm run sync-apifootball).'}</p>`}
       </section>
       <section>
         <h2 class="display">Características</h2>
@@ -425,12 +430,15 @@ function renderPlayer(p) {
           ? `<p class="unavailable">Sem estatísticas suficientes para apontar pontos fortes ou fracos deste jogador.</p>`
           : `<div class="chars"><h3>Pontos fortes</h3><div class="marks">${chars.positive.length ? chars.positive.map((c) => `<span class="mark${desired.includes(c) ? ' hit' : ''}">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum destaque nas estatísticas disponíveis.</span>'}</div></div>
              <div class="chars"><h3>Pontos fracos</h3><div class="marks">${chars.negative.length ? chars.negative.map((c) => `<span class="mark weak">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum apontado.</span>'}</div></div>
-             <p class="src">${chars.source === 'estatisticas' ? `Deduzidas de gols e assistências por 90 minutos${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.` : 'Informadas pela fonte.'}${desired.length ? ' Em preto, as que você procurou.' : ''}</p>`}
+             <p class="src">${chars.source === 'estatisticas'
+               ? `Deduzidas ${p.recent ? `das estatísticas da API-Football` : 'de gols e assistências'} por 90 minutos${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.`
+               : 'Informadas pela fonte.'}${desired.length ? ' Em preto, as que você procurou.' : ''}</p>`}
       </section>
     </div>
 
     <footer class="colophon">
-      <span>Fonte: ${esc(sourceName(p.source))}.</span>
+      <span>Perfil, valor e contrato: ${esc(sourceName(p.source))}.</span>
+      ${p.recent ? `<span>Clube, minutos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>` : ''}
       ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(k === 'transfermarkt' ? 'Transfermarkt' : k === 'sofascore' ? 'SofaScore' : k)}</a>`).join('')}
     </footer>
   </section>`;

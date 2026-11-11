@@ -40,9 +40,11 @@ after(async () => {
   await Promise.all([feed, app].map((s) => new Promise((r) => s.close(r))));
 });
 
-test('sem feed configurado, nada é enriquecido e "bola parada" não aparece no demo', async () => {
+test('sem feed configurado, ninguém atende "bola parada": todos ficam sinalizados como sem dados para avaliar', async () => {
   const d = await search();
-  assert.equal(d.total, 0);
+  const all = Object.values(d.markets).flat();
+  assert.ok(all.length > 0);
+  assert.ok(all.every((p) => p.match.noData && p.match.matched.length === 0));
   assert.equal(feedHits, 0);
 });
 
@@ -60,9 +62,12 @@ test('com feed autorizado e ID mapeado, ranking e ficha usam as características
 
   const d = await search();
   const all = Object.values(d.markets).flat();
-  assert.deepEqual(all.map((p) => p.id), [target.id], 'só o jogador enriquecido tem "bola parada"');
-  assert.equal(all[0].characteristics.source, 'fonte');
-  assert.deepEqual(all[0].match.matched, ['bolaParada']);
+  const hits = all.filter((p) => p.match.matched.length);
+  assert.deepEqual(hits.map((p) => p.id), [target.id], 'só o jogador enriquecido tem "bola parada"');
+  assert.ok(all.filter((p) => p !== hits[0]).every((p) => p.match.noData), 'os demais vêm sinalizados');
+  assert.equal(d.markets[hits[0].market][0].id, target.id, 'quem atende vem primeiro');
+  assert.equal(hits[0].characteristics.source, 'fonte');
+  assert.deepEqual(hits[0].match.matched, ['bolaParada']);
 
   const p = await fetch(`${base}/api/players/${encodeURIComponent(target.id)}`).then((r) => r.json());
   assert.equal(p.source, 'demo', 'identidade e fonte original preservadas');

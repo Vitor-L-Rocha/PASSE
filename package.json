@@ -9,9 +9,10 @@
   "scripts": {
     "sync-data": "node scripts/sync-data.js",
     "prestart": "node scripts/sync-data.js --if-missing",
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "node --import ./test/setup.js --test test/"
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "test": "node --import ./test/setup.js --test test/",
+    "sync-apifootball": "node --env-file-if-exists=.env scripts/sync-apifootball.js"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,6 @@
     "express": "^4.22.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   }
 }

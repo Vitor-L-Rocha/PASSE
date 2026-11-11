@@ -55,7 +55,7 @@ test('critérios opcionais, posição case insensitive e país da liga', () => {
 
 test('características: fonte tem prioridade, códigos desconhecidos são descartados e stats inválidas não geram pontos', () => {
   const fromSource = characteristicsOf({ ...player, characteristics: { positive: ['desarme', 'xyz'], negative: ['passe'] } });
-  assert.deepEqual(fromSource, { positive: ['desarme'], negative: ['passe'], source: 'fonte' });
+  assert.deepEqual(fromSource, { positive: ['desarme'], negative: ['passe'], source: 'fonte', evaluable: null });
   const derived = characteristicsOf({ ...player, stats: { tackles: NaN, interceptions: Infinity, rating: 'x' } });
   assert.equal(derived.source, 'indisponivel', 'sem stats utilizáveis não há características');
   assert.deepEqual(derived.positive, []);
