@@ -278,7 +278,7 @@ function renderReport() {
       <div class="tabs" role="tablist">
         ${Object.entries(meta.markets).map(([k, label]) => `
           <button class="tab" role="tab" id="tab-${k}" aria-controls="roster" data-market="${k}" aria-selected="${k === report.market}">
-            <span class="t">${esc(label)}</span><span class="c">${d.markets[k].length} jogadores</span>
+            <span class="t">${esc(label)}</span><span class="c">${countLabel(d, k)}</span>
           </button>`).join('')}
       </div>
       <p class="tab-note" id="tab-note"></p>
@@ -309,6 +309,12 @@ function renderReport() {
     report.scrollY = window.scrollY;
     location.hash = `#/jogador/${encodeURIComponent(r.dataset.id)}`;
   });
+}
+
+function countLabel(d, k) {
+  const total = d.marketTotals?.[k] ?? d.markets[k].length;
+  const shown = d.markets[k].length;
+  return shown < total ? `${shown} de ${total.toLocaleString('pt-BR')} jogadores` : `${total} jogador${total === 1 ? '' : 'es'}`;
 }
 
 function rosterRow(p) {

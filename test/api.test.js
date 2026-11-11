@@ -94,3 +94,13 @@ test('características conflitantes não são silenciosamente ignoradas', async 
   assert.equal(data.criteria.filters.foot, undefined);
   assert.ok(data.criteria.warnings.some((w) => /conflitantes/.test(w)));
 });
+
+test('mercados informam o total real além da lista limitada', async () => {
+  const { status, data } = await search({ characteristics: '' });
+  assert.equal(status, 200);
+  for (const k of Object.keys(data.markets)) {
+    assert.ok(data.marketTotals[k] >= data.markets[k].length);
+    assert.ok(data.markets[k].length <= 25);
+  }
+  assert.equal(Object.values(data.marketTotals).reduce((a, b) => a + b, 0), data.total);
+});
