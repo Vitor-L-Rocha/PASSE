@@ -219,3 +219,24 @@ test('plano com limite de páginas: passa a buscar time por time e completa a li
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('temporada com amostra pequena aparece no histórico mas não alimenta características', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'passe-afs-'));
+  fs.mkdirSync(path.join(root, 'tm')); fs.mkdirSync(path.join(root, 'af'));
+  fs.writeFileSync(path.join(root, 'tm', 'players.json'), JSON.stringify({ players: [
+    { id: 'tmdata-5', source: 'tmdata', name: 'Pouca Amostra', position: 'ST', leagueCountry: 'BR', marketValueEur: 1, stats: {}, seasons: [] }] }));
+  fs.writeFileSync(path.join(root, 'af', 'enrichment.json'), JSON.stringify({ players: { 'tmdata-5': {
+    apiId: 5, current: false, season: '2024', team: 'T', minutes: 300, appearances: 5, stats: { goals: 1.2, dribbles: 4 } } } }));
+  const prev = { tm: process.env.PASSE_TMDATA_DIR, af: process.env.PASSE_API_FOOTBALL_DIR };
+  Object.assign(process.env, { PASSE_TMDATA_DIR: path.join(root, 'tm'), PASSE_API_FOOTBALL_DIR: path.join(root, 'af') });
+  try {
+    const { createTmdataProvider } = await import('../src/providers/tmdataProvider.js');
+    const p = await createTmdataProvider().getPlayer('tmdata-5');
+    assert.deepEqual(p.stats, {});
+    assert.equal(p.seasons[0].season, '2024');
+    assert.equal(p.apiFootballId, 5);
+  } finally {
+    for (const [k, v] of [['PASSE_TMDATA_DIR', prev.tm], ['PASSE_API_FOOTBALL_DIR', prev.af]]) (v === undefined ? delete process.env[k] : (process.env[k] = v));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -341,7 +341,7 @@ function rosterRow(p) {
       <span class="where">${esc(where)}${who ? `. ${esc(who)}` : ''}</span>
       ${fit ? `<span class="fit">${fit}</span>` : ''}
     </span>
-    <span class="value num">${money(p.marketValueEur)}<small>${Number.isFinite(p.minutes) ? `${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)}` : 'valor de mercado'}</small></span>
+    <span class="value num">${money(p.marketValueEur)}<small>${Number.isFinite(p.minutes) ? `${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)}` : Number.isFinite(p.appearances) && p.season ? `${p.appearances} jogos em ${esc(p.season)}` : 'valor de mercado'}</small></span>
   </button></li>`;
 }
 
@@ -431,7 +431,7 @@ function renderPlayer(p) {
           : `<div class="chars"><h3>Pontos fortes</h3><div class="marks">${chars.positive.length ? chars.positive.map((c) => `<span class="mark${desired.includes(c) ? ' hit' : ''}">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum destaque nas estatísticas disponíveis.</span>'}</div></div>
              <div class="chars"><h3>Pontos fracos</h3><div class="marks">${chars.negative.length ? chars.negative.map((c) => `<span class="mark weak">${esc(charLabel(c))}</span>`).join('') : '<span class="quiet">Nenhum apontado.</span>'}</div></div>
              <p class="src">${chars.source === 'estatisticas'
-               ? `Deduzidas ${p.recent ? `das estatísticas da API-Football` : 'de gols e assistências'} por 90 minutos${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.`
+               ? `Deduzidas ${p.recent ? `das estatísticas da ${esc(p.recent.source)}` : 'de gols e assistências'} ${p.perGame ? 'por jogo (a fonte não informa minutos)' : 'por 90 minutos'}${Number.isFinite(p.minutes) ? ` (${p.minutes.toLocaleString('pt-BR')} min em ${esc(p.season)})` : Number.isFinite(p.appearances) && p.season ? ` (${p.appearances} jogos em ${esc(p.season)})` : ''}, comparadas a jogadores da mesma função.`
                : 'Informadas pela fonte.'}${desired.length ? ' Em preto, as que você procurou.' : ''}</p>`}
       </section>
     </div>
@@ -440,7 +440,7 @@ function renderPlayer(p) {
       <span>Perfil, valor e contrato: ${esc(sourceName(p.source))}.</span>
       ${p.recent ? (p.recent.current === false
         ? `<span>Temporada ${esc(p.recent.season)} e títulos: ${esc(p.recent.source)} (plano grátis libera até ${esc(p.recent.season)}; clube atual vem do perfil).</span>`
-        : `<span>Clube, minutos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>`) : ''}
+        : `<span>Clube, jogos e estatísticas de ${esc(p.recent.season)}: ${esc(p.recent.source)}${p.recent.fetchedAt ? `, atualizado em ${esc(dateBR(p.recent.fetchedAt))}` : ''}.</span>`) : ''}
       ${links.map(([k, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener">Perfil no ${esc(k === 'transfermarkt' ? 'Transfermarkt' : k === 'sofascore' ? 'SofaScore' : k)}</a>`).join('')}
     </footer>
   </section>`;

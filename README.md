@@ -72,6 +72,31 @@ Os ligados passam a ter:
 Valor de mercado, contrato e foto continuam vindo do índice. **Mapa de calor** não é
 oferecido pela API-Football e segue indisponível. `npm start` lê o `.env` sozinho.
 
+## Temporada atual grátis (GOAL API)
+
+A [GOAL API](https://goal-api.com) tem plano grátis (1.000 consultas/dia, sem cartão) com
+a **temporada atual**. Coloque `PASSE_GOAL_API_KEY` no `.env` e rode `npm run sync-goalapi`.
+
+Verificado com a chave real em novembro de 2026, no Brasileirão 2026:
+- 973 jogadores; **179 com estatística completa** (dribles, desarmes, interceptações,
+  passes decisivos, duelos, precisão de passe e nota) e 8 jogos ou mais, de **11 dos 20
+  times**. Flamengo, Fluminense, Botafogo, Cruzeiro, Atlético-MG e outros vêm sem números
+  utilizáveis.
+- A fonte **não informa minutos**: as taxas são por jogo, e a ficha diz isso.
+- Só entram números marcados como originais da fonte (`statsSource: "source"`); os
+  "derivados" pela própria GOAL são ignorados.
+
+Ordem de prioridade: GOAL API (temporada atual) > API-Football (no plano grátis, até
+2024) > índice. A API-Football continua fornecendo os **títulos**. Estatísticas com menos de
+450 minutos (ou 8 jogos) aparecem no histórico, mas não entram nas características.
+
+## Limites do plano grátis da API-Football (verificados com a chave real)
+
+- Temporadas só de 2022 a 2024: o PASSE usa a mais recente liberada, rotulada, sem trocar
+  o clube atual do jogador.
+- No máximo 3 páginas por consulta: a sincronização busca time por time.
+- Limite por minuto: as consultas são espaçadas (6,5 s) e repetidas uma vez se estourar.
+
 ## Outros provedores de dados
 
 Node 20.6+ e `npm install`. Copie `.env.example` para `.env`, configure as fontes

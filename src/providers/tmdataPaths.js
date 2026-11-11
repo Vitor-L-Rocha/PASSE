@@ -7,3 +7,6 @@ export const tmdataDirectory = (directory = process.env.PASSE_TMDATA_DIR) =>
 // Dados recentes da API-Football (scripts/sync-apifootball.js).
 export const apiFootballDirectory = (directory = process.env.PASSE_API_FOOTBALL_DIR) =>
   path.resolve(PROJECT_ROOT, directory || '.cache/apifootball');
+// Dados da temporada atual da GOAL API (scripts/sync-goalapi.js).
+export const goalApiDirectory = (directory = process.env.PASSE_GOAL_API_DIR) =>
+  path.resolve(PROJECT_ROOT, directory || '.cache/goalapi');
