@@ -89,7 +89,9 @@ export function deriveCharacteristics(player) {
     ([code, v]) => v !== null && (!group || getCharacteristic(code)?.positions.includes(group))
   );
   // Sem nenhuma estatística utilizável: não dá para afirmar pontos fortes nem fracos.
-  if (entries.length === 0) return { positive: [], negative: [], source: 'indisponivel' };
+  if (entries.length === 0) return { positive: [], negative: [], evaluable: [], source: 'indisponivel' };
+  // Características que as estatísticas DESTE jogador permitem avaliar.
+  const evaluable = entries.map(([c]) => c);
   const positive = entries
     .filter(([, v]) => v >= STRONG)
     .sort((x, y) => y[1] - x[1])
@@ -100,7 +102,7 @@ export function deriveCharacteristics(player) {
     .sort((x, y) => x[1] - y[1])
     .slice(0, MAX_NEGATIVE)
     .map(([c]) => c);
-  return { positive, negative, source: 'estatisticas' };
+  return { positive, negative, evaluable, source: 'estatisticas' };
 }
 
 // Usa o que a fonte informou; se não houver, deriva das estatísticas.
@@ -111,6 +113,7 @@ export function characteristicsOf(player) {
       positive: (c.positive || []).filter(getCharacteristic),
       negative: (c.negative || []).filter(getCharacteristic),
       source: c.source || 'fonte',
+      evaluable: null, // fonte própria: todas as características do vocabulário
     };
   }
   return deriveCharacteristics(player);

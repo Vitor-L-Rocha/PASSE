@@ -58,7 +58,10 @@ export function rankPlayers(players, { country, maxBudgetEur, position, criteria
     // Quando o clube pediu características, só entra quem atende pelo menos uma —
     // exceto jogadores SEM dados de desempenho na fonte: eles entram no fim da lista,
     // sinalizados, para que ligas sem estatísticas não sumam do relatório.
-    const noData = m.characteristics.source === 'indisponivel';
+    // Sem dados para avaliar o que foi pedido (ou sem dado algum): entra no fim, sinalizado.
+    const ev = m.characteristics.evaluable;
+    const noData = m.characteristics.source === 'indisponivel' ||
+      (desired.length > 0 && Array.isArray(ev) && desired.every((c) => !ev.includes(c)));
     if (!usingPositionProfile && desired.length > 0 && m.matched.length === 0 && !noData) continue;
     results.push({
       ...p,

@@ -44,7 +44,8 @@ test('tmdata recebe características antes do ranking e mantém identidade no de
     const response = await search();
     assert.equal(response.status, 200);
     const ranked = await response.json();
-    assert.deepEqual(ranked.markets.interno.map((p) => p.id), ['tmdata-7']);
+    assert.deepEqual(ranked.markets.interno.filter((p) => p.match.matched.length).map((p) => p.id), ['tmdata-7']);
+    assert.equal(ranked.markets.interno[0].id, 'tmdata-7');
     assert.deepEqual(ranked.markets.interno[0].match.matched, ['drible']);
     const detail = await fetch(`${base}/api/players/tmdata-7`).then((r) => r.json());
     assert.equal(detail.source, 'tmdata');
@@ -52,14 +53,14 @@ test('tmdata recebe características antes do ranking e mantém identidade no de
     assert.equal(detail.club, 'Original club');
     assert.equal(detail.marketValueEur, 100);
     assert.equal(detail.leagueCountry, 'BR');
-    assert.deepEqual(detail.characteristics, { positive: ['drible'], negative: ['desarme'], source: 'fonte' });
+    assert.deepEqual(detail.characteristics, { positive: ['drible'], negative: ['desarme'], source: 'fonte', evaluable: null });
     assert.equal(detail.heatmap.points[0].x, 70);
     blocked = true;
     // Outra identidade explícita evita depender da expiração do cache do primeiro ID.
     process.env.PASSE_SOFASCORE_PLAYER_IDS = '{"tmdata-7":"124"}';
     const blockedResponse = await search();
     assert.equal(blockedResponse.status, 200);
-    assert.equal((await blockedResponse.json()).total, 0);
+    assert.ok(Object.values((await blockedResponse.json()).markets).flat().every((p) => p.match.matched.length === 0));
     const before = calls;
     await search();
     assert.equal(calls, before, 'não repete chamadas durante pausa do 403');

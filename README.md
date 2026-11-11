@@ -46,6 +46,96 @@ atomicamente; falhas de parsing/download preservam o anterior. `npm start`
 reconstrói índices antigos/inválidos; `npm run sync-data` reconstrói a qualquer
 momento (reutilizando os CSVs válidos em cache por sete dias).
 
+## Dados recentes, mais características e títulos (API-Football)
+
+O índice acima é uma foto de julho de 2026. Para trazer a **temporada atual**, use
+a [API-Football](https://www.api-football.com) (API-Sports v3, acesso oficial; plano
+grátis com 100 consultas por dia):
+
+1. Crie a conta grátis em https://dashboard.api-football.com e copie a chave.
+2. Copie `.env.example` para `.env` e preencha `PASSE_API_FOOTBALL_KEY`.
+3. `npm run sync-apifootball -- --check` confere a chave, o plano e se ele libera a
+   temporada atual (o PASSE avisa se o plano só permite temporadas antigas).
+4. `npm run sync-apifootball` atualiza as ligas de `PASSE_API_FOOTBALL_SYNC_LEAGUES`
+   (padrão `BRA1`; o Brasileirão leva ~30 consultas). A cota é respeitada e a
+   sincronização continua de onde parou na execução seguinte.
+
+Cada jogador da API-Football é ligado ao do índice pela **data de nascimento e nome**.
+Os ligados passam a ter:
+
+- **clube atual**, jogos, minutos, gols e assistências da temporada corrente e a
+  **nota média da API-Football** (exibida como nota da fonte);
+- mais **características avaliáveis**: drible, passes decisivos, criação, desarme,
+  interceptação, duelos no chão, consistência e reflexos (goleiros);
+- **títulos** na ficha (rota `/trophies`, uma consulta por jogador, cache de 30 dias).
+
+Valor de mercado, contrato e foto continuam vindo do índice. **Mapa de calor** não é
+oferecido pela API-Football e segue indisponível. `npm start` lê o `.env` sozinho.
+
+## Temporada atual grátis (GOAL API)
+
+A [GOAL API](https://goal-api.com) tem plano grátis (1.000 consultas/dia, sem cartão) com
+a **temporada atual**. Coloque `PASSE_GOAL_API_KEY` no `.env` e rode `npm run sync-goalapi`.
+
+Verificado com a chave real em novembro de 2026, no Brasileirão 2026:
+- 973 jogadores; **179 com estatística completa** (dribles, desarmes, interceptações,
+  passes decisivos, duelos, precisão de passe e nota) e 8 jogos ou mais, de **11 dos 20
+  times**. Flamengo, Fluminense, Botafogo, Cruzeiro, Atlético-MG e outros vêm sem números
+  utilizáveis.
+- A fonte **não informa minutos**: as taxas são por jogo, e a ficha diz isso.
+- Só entram números marcados como originais da fonte (`statsSource: "source"`); os
+  "derivados" pela própria GOAL são ignorados.
+
+Ordem de prioridade: GOAL API (temporada atual) > API-Football (no plano grátis, até
+2024) > índice. A API-Football continua fornecendo os **títulos**. Estatísticas com menos de
+450 minutos (ou 8 jogos) aparecem no histórico, mas não entram nas características.
+
+## Limites do plano grátis da API-Football (verificados com a chave real)
+
+- Temporadas só de 2022 a 2024: o PASSE usa a mais recente liberada, rotulada, sem trocar
+  o clube atual do jogador.
+- No máximo 3 páginas por consulta: a sincronização busca time por time.
+- Limite por minuto: as consultas são espaçadas (6,5 s) e repetidas uma vez se estourar.
+
+## IDs entre plataformas e links (Reep)
+
+`npm run sync-reep` usa o [Reep](https://reep.football) (registro aberto de identidades do
+futebol, **CC0**; baixa ~180 MB na primeira vez) para ligar o ID do Transfermarkt de cada
+jogador aos IDs dele em outras plataformas. Em nov/2026: 24.021 dos 24.263 jogadores do
+índice encontrados; API-Football 19.333, FotMob 23.390, WhoScored 19.166, SofaScore 10.810,
+FBref 7.322, Understat 3.755.
+
+Com isso:
+- a ligação com a API-Football passa a ser pelo **ID oficial** (nascimento + nome fica como
+  reserva), e os **títulos** ficam disponíveis para muito mais jogadores;
+- a ficha ganha **links para o perfil** no SofaScore, FotMob, FBref, WhoScored e Understat.
+  O **mapa de calor**, quando a fonte do PASSE não tem, aparece como botões "Ver no SofaScore /
+  Ver no FotMob". O PASSE só aponta para as páginas: não coleta nada delas.
+
+## Lesões e temporadas por competição (football-datasets)
+
+`npm run sync-salimt` usa o [football-datasets](https://github.com/salimt/football-datasets)
+(sem licença no GitHub, mas publicado pelo próprio autor no
+[Kaggle](https://www.kaggle.com/datasets/xfkzujqjvx97n/football-datasets) sob **CC0**). Os IDs
+são os do Transfermarkt, então a ligação com o índice é exata. Baixa ~170 MB.
+
+- **Histórico de lesões** (registros até **28/09/2026**): 33.953 lesões desde jul/2022 para
+  jogadores do índice. A ficha mostra dias e jogos perdidos nos últimos 2 anos e as lesões
+  recentes; o relatório avisa quem estava **lesionado no último registro**.
+- **Temporadas por competição** (até **set/2025**), de todas as ligas, inclusive o
+  Brasileirão: completam a tabela da ficha onde nenhuma outra fonte tem a temporada, e
+  gols/assistências só viram estatística para o ranking se o jogador não tiver nenhuma outra.
+- **Não** é mais recente que o índice em valor de mercado e clube (vai até set/2025), por
+  isso esses campos continuam vindo do índice.
+
+## Perfis parecidos
+
+Na ficha, o PASSE lista jogadores da mesma família de posição (pontas com pontas, laterais
+com laterais) com **perfil estatístico semelhante** e dentro do teto do relatório, do mais
+parecido para o menos, com o que eles têm em comum. Comparação nas estatísticas por 90
+minutos (ou por jogo) normalizadas por função; exige amostra mínima e pelo menos 3
+estatísticas em comum. Não dá nota a ninguém. Rota: `GET /api/players/:id/similar?teto=`.
+
 ## Outros provedores de dados
 
 Node 20.6+ e `npm install`. Copie `.env.example` para `.env`, configure as fontes

@@ -10,6 +10,8 @@ import { rankPlayers } from './core/matcher.js';
 import { characteristicsOf } from './core/characteristics.js';
 import { searchAll, getPlayerById, availableCharacteristics, sourcesInfo } from './providers/index.js';
 import { enrichPlayerWithSofascore } from './providers/sofascoreProvider.js';
+import { titlesFor } from './providers/apiFootballTitles.js';
+import { similarPlayers, comparablePositions } from './core/similarity.js';
 
 // Acrescenta características/mapa de calor do feed autorizado do SofaScore a jogadores
 // de outras fontes que tenham ID SofaScore configurado. Sem config ou em erro, devolve o original.
@@ -71,10 +73,32 @@ export function createApp() {
     }
   });
 
+  // Perfis parecidos (mesma família de posição, estatísticas semelhantes; ?teto= limita o valor).
+  app.get('/api/players/:id/similar', async (req, res) => {
+    try {
+      const target = await enrich(await getPlayerById(req.params.id));
+      if (!target) return res.status(404).json({ errors: ['Jogador não encontrado.'] });
+      const teto = req.query.teto === undefined ? undefined : Number(req.query.teto);
+      if (teto !== undefined && !(Number.isFinite(teto) && teto > 0)) return res.status(400).json({ errors: ['Teto inválido.'] });
+      const pool = [];
+      for (const position of comparablePositions(target.position)) pool.push(...(await searchAll({ position, maxBudgetEur: teto })).players);
+      const similar = similarPlayers(target, await Promise.all(pool.map(enrich)), { maxBudgetEur: teto });
+      res.json({ id: target.id, similar: similar.map(({ player, inCommon, onlyTarget }) => ({ ...summary(player), inCommon, onlyTarget })) });
+    } catch (err) {
+      console.error(err);
+      res.status(502).json({ errors: ['Falha ao buscar perfis parecidos.'] });
+    }
+  });
+
   app.get('/api/players/:id', async (req, res) => {
     try {
       const player = await enrich(await getPlayerById(req.params.id));
       if (!player) return res.status(404).json({ errors: ['Jogador não encontrado.'] });
+      // Títulos pela API-Football quando a fonte principal não informa (1 consulta, cache de 30 dias).
+      if (!Array.isArray(player.titles) && Number.isInteger(player.apiFootballId)) {
+        const t = await titlesFor(player.apiFootballId);
+        if (t) Object.assign(player, { titles: t.titles, titlesSource: t.source });
+      }
       res.json({ ...player, characteristics: characteristicsOf(player) });
     } catch (err) {
       console.error(err);
@@ -87,8 +111,8 @@ export function createApp() {
 
 // Versão compacta para a listagem; o dashboard busca o detalhe completo.
 function summary(p) {
-  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics, season, minutes, appearances } = p;
-  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics, season: season ?? null, minutes: minutes ?? null, appearances: appearances ?? null };
+  const { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl, market, match, characteristics, season, minutes, appearances, injuredAtSnapshot } = p;
+  return { id, source, name, age, nationality, foot, position, club, league, leagueCountry, marketValueEur, photoUrl: photoUrl ?? null, market, match, characteristics, season: season ?? null, minutes: minutes ?? null, appearances: appearances ?? null, injuredAtSnapshot: Boolean(injuredAtSnapshot) };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
