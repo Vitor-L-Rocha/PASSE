@@ -6,7 +6,7 @@ import { tmdataDirectory } from './tmdataPaths.js';
 import { getCountry } from '../data/countries.js';
 import { getPosition } from '../data/positions.js';
 import { matchesQuery } from './normalization.js';
-import { normalizeSeasons, normalizeTitles, safeUrl } from './dashboard.js';
+import { normalizeSeasons, safeUrl } from './dashboard.js';
 
 export function createTmdataProvider({ env = process.env, now = () => new Date() } = {}) {
   let loaded;
@@ -34,7 +34,7 @@ export function createTmdataProvider({ env = process.env, now = () => new Date()
           ? Object.fromEntries(Object.entries(p.stats).filter(([, value]) => nonnegative(value) != null)) : {},
         photoUrl: safeUrl(p.photoUrl),
         links: safeUrl(p.links?.transfermarkt) ? { transfermarkt: safeUrl(p.links.transfermarkt) } : {},
-        seasons: normalizeSeasons(p.seasons), titles: normalizeTitles(p.titles), heatmap: null,
+        seasons: normalizeSeasons(p.seasons), titles: null, heatmap: null, // fonte não informa títulos nem mapa de calor
         characteristics: null });
     }
     if (index.players.length && !byId.size) throw new Error('Índice sem jogadores válidos; rode npm run sync-data.');

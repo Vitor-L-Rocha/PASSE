@@ -106,3 +106,19 @@ test('registro usa fallback apenas por padrão e capacidades de enriquecimento e
   assert.deepEqual(activeProviders(), []);
   assert.deepEqual(sourcesInfo(), []);
 });
+
+test('tmdata informa títulos como indisponíveis (null), não como lista vazia', async () => {
+  const { createTmdataProvider } = await import('../src/providers/tmdataProvider.js');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'passe-titles-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'players.json'), JSON.stringify({ players: [
+      { id: 'tmdata-1', source: 'tmdata', name: 'A', position: 'ST', leagueCountry: 'BR', marketValueEur: 1, titles: [] },
+    ] }));
+    const p = await createTmdataProvider({ env: { PASSE_TMDATA_DIR: dir } }).getPlayer('tmdata-1');
+    assert.equal(p.titles, null);
+    assert.equal(p.heatmap, null);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
